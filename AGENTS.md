@@ -2,24 +2,26 @@
 
 ## Git và phạm vi
 
-- `develop` là default branch và nhánh tích hợp của repo này. Không triển khai, push hoặc merge tính năng vào `main`.
-- Mỗi task mới dùng một nhánh riêng từ `origin/develop` đã cập nhật. Trước khi sửa, kiểm tra status/branch/baseline; không reset, stash hoặc ghi đè thay đổi của người khác.
-- Tạo PR vào `develop`, chạy kiểm tra và review trước khi merge. Chỉ merge khi đã được người dùng cho phép; yêu cầu hiện tại đã cho phép merge phần khởi tạo mobile vào `develop`.
-- Bàn giao ghi phạm vi thực tế, kết quả validation và trạng thái commit/push/PR. Không gọi bundle export là APK/IPA đã build hoặc kiểm thử thiết bị.
+- `develop` là default branch và nhánh tích hợp. Không triển khai, push hoặc merge tính năng vào `main`.
+- Mỗi task mới dùng nhánh riêng từ `origin/develop` đã cập nhật. Kiểm tra status/branch/baseline trước khi sửa; không reset, stash hoặc ghi đè thay đổi của người khác.
+- Tạo PR vào `develop`, chạy kiểm tra và review trước merge. Chỉ merge khi được người dùng cho phép; yêu cầu hiện tại đã cho phép đưa nền tảng mobile vào `develop`.
+- Người dùng đã chọn Flutter/Dart thay Expo. Xem `docs/FLUTTER_MIGRATION.md`; không tự khôi phục stack cũ.
+- Bàn giao ghi phạm vi, validation và trạng thái commit/push/PR. Phân biệt test/build, backend/database thật, thiết bị và bản phát hành đã ký.
 
-## Triển khai
+## Triển khai Flutter
 
-- Dùng Expo Router cho navigation; route đặt trong `src/app`, logic và component đặt ngoài thư mục route.
-- Tái sử dụng API backend hiện có. Backend quyết định authorization, academic scope, capability và trạng thái nghiệp vụ.
-- Ưu tiên Student/Team Leader. Giữ phạm vi mobile ở thông tin cần theo dõi và thao tác ngắn; xem `docs/MOBILE_ROADMAP.md`.
-- Dùng token giao diện trong `src/ui/theme.ts`, touch target tối thiểu 48dp, có loading/error/empty và nhãn accessibility.
-- Không thêm global state, thư viện hoặc abstraction nếu tính năng hiện tại chưa cần.
-- Cài thư viện Expo/native bằng `npx expo install` để giữ tương thích SDK. Đọc tài liệu tương ứng phiên bản Expo trong `package.json` trước khi dùng API mới.
-- Không sửa trực tiếp thư mục native được sinh; cấu hình qua app config và plugin.
+- Dùng Flutter **3.50.0 stable**, đồng bộ với CI; commit `pubspec.lock`.
+- Ưu tiên widget, navigation và quản lý trạng thái có sẵn trong SDK; Flutter 3.50 dùng package Material chính thức `material_ui` thay import `flutter/material.dart` đã deprecated. Không thêm global-state library hoặc abstraction khi tính năng chưa cần.
+- Backend quyết định authorization, academic scope, capability, scoring và trạng thái nghiệp vụ.
+- Ưu tiên Student/Team Leader, thông tin thường xem và thao tác ngắn; xem `docs/MOBILE_ROADMAP.md`.
+- Dùng theme/ColorScheme chung, SafeArea, touch target tối thiểu 48dp, nhãn semantics và loading/error/empty. Kiểm tra màn hình nhỏ và text scale lớn.
+- Android/iOS/web là project Flutter chuẩn. Giữ cấu hình nền tảng cần thiết trong Git; không commit build output, SDK local path, signing credential hoặc cấu hình thiết bị cá nhân.
+- Đọc tài liệu chính thức tương ứng phiên bản Flutter/plugin trước khi dùng API mới hoặc nâng dependency.
 
 ## Bảo mật và kiểm tra
 
-- Không commit credential, token hoặc file môi trường cục bộ. `EXPO_PUBLIC_*` là dữ liệu công khai.
-- Native refresh token dùng SecureStore; không lưu mật khẩu hoặc access token xuống storage thông thường. Web preview giữ phiên trong bộ nhớ.
-- Thay đổi logic phiên/API phải có test phù hợp, đặc biệt refresh đồng thời, hết phiên và đăng xuất.
-- Trước PR chạy `npm run check`, `npx expo install --check` và `npx expo export --platform all`. Nêu rõ phần chưa thể xác minh trên thiết bị/backend thật.
+- `API_BASE_URL` qua define/file define là cấu hình công khai. Không commit credential/token.
+- Native refresh token dùng `flutter_secure_storage`; access token và web preview session ở bộ nhớ. Không lưu mật khẩu.
+- Thay đổi session/API cần test refresh đồng thời, hết phiên, logout, response đến muộn và storage failure.
+- Trước PR chạy `dart format --output=none --set-exit-if-changed lib test`, `flutter analyze`, `flutter test` và web build. Khi đổi native/plugin/config, kiểm tra Android build và ghi rõ iOS/device chưa xác minh nếu chưa chạy.
+- Không lấy validation Expo lịch sử làm bằng chứng Flutter. Ghi kết quả hiện tại vào `docs/FLUTTER_VALIDATION.md`; không khẳng định live backend/database/device đạt khi chỉ dùng mock hoặc build.

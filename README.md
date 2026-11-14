@@ -1,69 +1,89 @@
 # AI-PMS Mobile
 
-Ứng dụng đồng hành cho sinh viên và trưởng nhóm: theo dõi đồ án, hạn công việc và thông tin học vụ trên điện thoại. Mobile dùng chung API và dữ liệu với AI-PMS Web.
+Ứng dụng **Flutter/Dart** đồng hành cho sinh viên và trưởng nhóm: theo dõi đồ án, hạn công việc và thông tin cần xem trên điện thoại. Mobile dùng chung backend/database với AI-PMS Web.
 
-Nền tảng ban đầu sử dụng **React Native, Expo SDK 58, TypeScript và Expo Router**. `develop` là nhánh mặc định và nhánh tích hợp; phát triển từng tính năng trên nhánh riêng, mở PR vào `develop`.
+`develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi hiện tại
+## Phạm vi nền tảng
 
-- Đăng nhập bằng tài khoản AI-PMS hiện có, khôi phục phiên và đăng xuất.
-- Native lưu refresh token bằng Expo SecureStore; access token giữ trong bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
-- Hai tab hoạt động: **Tổng quan** và **Tài khoản**.
-- Tổng quan lấy dữ liệu thật từ `GET /api/v1/dashboards/student`, có trạng thái tải, lỗi, thử lại và làm mới.
-- Phạm vi chức năng ưu tiên tài khoản `STUDENT`. Tài khoản vai trò khác nhận thông báo về phạm vi hỗ trợ; backend vẫn quyết định quyền truy cập.
+- Login, khôi phục phiên và logout với tài khoản AI-PMS.
+- Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
+- Hai tab **Tổng quan** và **Tài khoản**; dashboard gọi `GET /api/v1/dashboards/student`, có tải/lỗi/thử lại/làm mới.
+- Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
+- Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
 
-Các màn hình quản lý project/task đầy đủ và thao tác nhanh sẽ được triển khai theo [roadmap](docs/MOBILE_ROADMAP.md). Không có dữ liệu demo hoặc backend riêng cho mobile.
+Code dùng contract backend hiện hành. Test/build không xác nhận đăng nhập backend hoặc đọc database triển khai. Xem [validation Flutter](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
 
-## Chạy lần đầu
+## Chuẩn bị môi trường
 
-Cần **Node.js 24** (từ 24.3.0), npm và một API AI-PMS có thể truy cập. `package-lock.json` khóa các dependency của dự án.
+Cài **Flutter 3.50.0 stable / Dart 3.14.0** và thêm thư mục `bin` của SDK vào `PATH`; CI dùng cùng phiên bản. Trên máy Windows của dự án, SDK đặt tại `E:\tools\flutter`; đây là đường dẫn cục bộ, không phải dependency trong repo.
 
 ```powershell
+flutter --version
+flutter doctor -v
 git clone https://github.com/aipms-sep490/ai-pms-mobile.git
 cd ai-pms-mobile
 git switch develop
-npm ci
-Copy-Item .env.example .env.local
+flutter pub get
 ```
 
-Sửa `EXPO_PUBLIC_API_URL` trong `.env.local` thành **origin của API**, không thêm `/api/v1`:
+Android cần Android SDK/toolchain và emulator hoặc điện thoại bật USB debugging; kiểm tra bằng `flutter doctor`. Build/chạy iOS cần macOS và Xcode. Web preview dùng Chrome/Edge; `flutter devices` liệt kê thiết bị khả dụng.
 
-| Thiết bị chạy app | Ví dụ API origin |
+## Cấu hình API và chạy
+
+Truyền **origin của API**, không thêm `/api/v1`, bằng `API_BASE_URL`:
+
+| Thiết bị | Ví dụ API origin |
 | --- | --- |
-| Web preview trên máy chạy backend | `http://localhost:5080` |
+| Web trên máy chạy backend | `http://localhost:5080` |
 | Android emulator mặc định | `http://10.0.2.2:5080` |
-| Điện thoại thật | IP LAN có thể truy cập của máy chạy backend hoặc URL HTTPS của môi trường dùng thử |
-
-Điện thoại cần kết nối được API trực tiếp. Với LAN, backend phải lắng nghe trên địa chỉ phù hợp và firewall cho phép cổng đó. `localhost` trên điện thoại trỏ về chính điện thoại. Chỉ dùng HTTP với môi trường phát triển tin cậy; môi trường triển khai dùng HTTPS.
+| Điện thoại thật | IP LAN truy cập được của máy chạy backend hoặc URL HTTPS môi trường thử nghiệm |
 
 ```powershell
-npm start
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:5080
+flutter devices
+# Thay emulator-5554 bằng device ID được liệt kê.
+flutter run -d emulator-5554 --dart-define=API_BASE_URL=http://10.0.2.2:5080
 ```
 
-Mở app bằng Expo Go tương thích SDK hoặc development build. Có thể dùng `npm run android` với Android emulator đã cấu hình, hoặc `npm run web` để xem trên trình duyệt. iOS Simulator cần macOS; Windows có thể chạy Metro và kết nối iPhone phù hợp qua Expo Go/development build.
-
-Web preview cần backend cho phép CORS đối với origin trình duyệt mà Expo hiển thị. Sau khi đổi API origin, khởi động lại Metro; nếu giá trị chưa đổi, chạy `npm start -- --clear`.
-
-## Kiểm tra trước PR
+Hoặc dùng file cấu hình công khai cục bộ:
 
 ```powershell
-npm run check
-npx expo install --check
-npx expo-doctor
-npx expo export --platform all
+Copy-Item config/example.json config/local.json
+# Sửa API_BASE_URL cho thiết bị đang dùng.
+flutter run -d chrome --dart-define-from-file=config/local.json
 ```
 
-`check` chạy TypeScript, lint và các test logic. Export kiểm tra việc đóng gói JavaScript/assets cho các nền tảng; không thay thế kiểm thử trên thiết bị hoặc tạo APK/IPA đã ký.
+`config/local.json` được bỏ qua bởi Git. Sau khi đổi define, dừng app rồi chạy lại; hot reload không thay cấu hình biên dịch.
 
-GitHub Actions chạy kiểm tra và export khi có PR vào `develop` hoặc push lên `develop`. CI không cần tài khoản Expo hay secret backend và không tự phát hành app.
+Điện thoại phải kết nối được API trực tiếp. Với LAN, backend cần lắng nghe đúng địa chỉ và firewall cho phép cổng đó. `localhost` trên điện thoại trỏ về chính điện thoại. HTTP chỉ dùng trong phát triển tin cậy; triển khai dùng HTTPS. Web preview cần backend cho phép CORS đối với origin trình duyệt mà Flutter phục vụ.
 
-## Cấu hình và phiên đăng nhập
+Android chỉ cho phép cleartext HTTP trong debug build; release dùng HTTPS. Với iOS, ưu tiên HTTPS và kiểm tra App Transport Security của môi trường thử nghiệm trước khi dùng API LAN.
 
-- Mọi biến `EXPO_PUBLIC_*` được đóng gói vào app và có thể đọc được. Chỉ đặt cấu hình công khai, không đặt mật khẩu, JWT signing key, private key hoặc service credential.
-- `.env.local`, token và tài khoản thử nghiệm không được commit. Dùng tài khoản do môi trường backend cấp.
-- Các endpoint dùng chung: `/api/v1/auth/login`, `/refresh`, `/me`, `/logout` và `/api/v1/dashboards/student`.
-- Quyền, phạm vi nhóm/project và trạng thái nghiệp vụ do backend kiểm soát. Không suy quyền từ giao diện hoặc tự tính lại chính sách học vụ.
-- Web preview đăng nhập lại sau khi reload. Native dùng secure storage cho refresh token; không lưu mật khẩu.
+## Kiểm tra và build
+
+```powershell
+flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test
+flutter build web --release --dart-define=API_BASE_URL=http://localhost:5080
+flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:5080
+```
+
+Web output ở `build/web`; debug APK ở `build/app/outputs/flutter-apk/app-debug.apk` khi build thành công. Debug APK dành cho thử nghiệm, chưa phải bản phát hành đã ký để đưa lên store. iOS cần macOS/Xcode và kiểm tra riêng.
+
+GitHub Actions chạy format/analyze/test, web release build và Android debug APK build cho PR vào `develop` và push lên `develop`. CI dùng API origin công khai để biên dịch; không đăng nhập backend hoặc tự phát hành app.
+
+Khi CI build thành công, tải artifact `android-debug-apk` tại trang workflow run; artifact được giữ 7 ngày. APK CI được cấu hình cho Android emulator (`http://10.0.2.2:5080`) để kiểm tra biên dịch, không trỏ tới backend triển khai. Khi build để chạy với môi trường khác, truyền `API_BASE_URL` phù hợp qua `--dart-define` hoặc file define như hướng dẫn trên.
+
+## Cấu hình và phiên
+
+- `--dart-define` và giá trị từ file define có thể đọc được từ app đã build. Chỉ đặt cấu hình công khai, không đặt mật khẩu, signing key hoặc service credential.
+- Không commit token, mật khẩu hoặc cấu hình riêng của môi trường. Commit `pubspec.lock` để dependency nhất quán.
+- Endpoint: `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/me`, `/api/v1/auth/logout` và `/api/v1/dashboards/student`.
+- Không lưu mật khẩu hoặc access token xuống storage. Web preview đăng nhập lại sau reload.
+- Quyền và chính sách học vụ do backend quyết định.
 
 ## Làm việc với Git
 
@@ -75,8 +95,6 @@ git switch -c feat/ten-tinh-nang
 git push -u origin feat/ten-tinh-nang
 ```
 
-Mở PR với base **`develop`**, kiểm tra CI và review trước khi merge. Không code, push hoặc merge tính năng vào `main`.
+Mở PR với base **`develop`**, kiểm tra CI và review trước merge. Không code, push hoặc merge tính năng vào `main`.
 
-## Giới hạn bản nền tảng
-
-Chưa cấu hình tài khoản EAS, signing, store release hoặc bản APK/IPA. Native runtime, secure storage, điều hướng, bàn phím và kết nối API cần smoke test trên thiết bị mục tiêu trước phát hành. Thông báo trong hệ thống và push khi app đóng là hai hạng mục riêng; backend hiện chưa có external push delivery.
+Ưu tiên nghiệm thu nền tảng với **backend/database thật và thiết bị mục tiêu** trước khi mở rộng project/task. Theo dõi push ngoài hệ thống và phát hành store thành các hạng mục riêng.
