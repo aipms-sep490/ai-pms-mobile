@@ -1,4 +1,6 @@
-# MOB-03 validation — 14/11/2026
+# Lịch sử validation Expo — 14/11/2026
+
+Tài liệu này ghi kết quả nền tảng **Expo/React Native** tại commit `c4422a9` (PR #4), trước khi chuyển sang Flutter theo lựa chọn của người dùng. Giữ lại để truy vết; kết quả bên dưới **không xác minh bản Flutter hiện tại**. Xem `FLUTTER_VALIDATION.md` và `FLUTTER_MIGRATION.md`.
 
 ## Đã kiểm tra
 
