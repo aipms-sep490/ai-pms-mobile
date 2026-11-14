@@ -12,7 +12,7 @@
 - Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
 - Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
 
-Code dùng contract backend hiện hành. Test/build không xác nhận đăng nhập backend hoặc đọc database triển khai. Xem [validation Flutter](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
+Code dùng contract backend hiện hành. Đã kiểm tra login, tổng quan, làm mới và logout với backend staging qua trình duyệt; test tự động dùng HTTP mock. Xem phạm vi và giới hạn trong [validation Flutter](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
 
 ## Chuẩn bị môi trường
 
@@ -33,8 +33,17 @@ Android cần Android SDK/toolchain và emulator hoặc điện thoại bật US
 
 Truyền **origin của API**, không thêm `/api/v1`, bằng `API_BASE_URL`:
 
+Chạy với backend đã triển khai (cùng API với web):
+
+```powershell
+flutter run -d web-server --web-hostname=localhost --web-port=5173 --dart-define-from-file=config/staging.json
+```
+
+Mở `http://localhost:5173`. Origin này đã được kiểm tra CORS với staging; cổng ngẫu nhiên có thể bị backend từ chối. File `config/staging.json` chỉ chứa API origin công khai, không chứa tài khoản. Web preview giữ phiên ở bộ nhớ nên đăng nhập lại sau reload.
+
 | Thiết bị | Ví dụ API origin |
 | --- | --- |
+| Backend staging | `https://api-staging.khaidz.com` |
 | Web trên máy chạy backend | `http://localhost:5080` |
 | Android emulator mặc định | `http://10.0.2.2:5080` |
 | Điện thoại thật | IP LAN truy cập được của máy chạy backend hoặc URL HTTPS môi trường thử nghiệm |

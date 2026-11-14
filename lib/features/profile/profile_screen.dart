@@ -45,51 +45,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     };
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
+        constraints: const BoxConstraints(maxWidth: 680),
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            const Text(
-              'KHÔNG GIAN CÁ NHÂN',
-              style: TextStyle(
-                fontSize: 11,
-                letterSpacing: 1.4,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 12),
             Semantics(
               header: true,
-              child: Text('Tài khoản', style: textTheme.headlineLarge),
+              child: Text('Tài khoản', style: textTheme.headlineMedium),
             ),
-            const SizedBox(height: 36),
-            const Center(
-              child: CircleAvatar(
-                radius: 36,
-                backgroundColor: AppColors.primarySoft,
-                child: Icon(
-                  Icons.person_outline,
-                  size: 32,
-                  color: AppColors.primary,
+            const SizedBox(height: 24),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CircleAvatar(
+                  radius: 26,
+                  backgroundColor: AppColors.primarySoft,
+                  child: Icon(
+                    Icons.person_outline,
+                    size: 26,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user?.fullName ?? '', style: textTheme.titleLarge),
+                      const SizedBox(height: 4),
+                      Text(user?.email ?? '', style: textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              user?.fullName ?? '',
-              style: textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              user?.email ?? '',
-              style: textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 border: Border.all(color: AppColors.border),
@@ -98,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Vai trò'),
+                  Text('Vai trò', style: textTheme.bodyMedium),
                   const SizedBox(height: 8),
                   Text(
                     user?.roles
