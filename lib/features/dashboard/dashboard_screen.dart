@@ -78,58 +78,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isStudent) return _unsupportedRole();
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: _isStudent ? _overview() : _unsupportedRole(),
+      ),
+    );
+  }
+
+  Widget _overview() {
     final dashboard = _data;
     return RefreshIndicator(
       onRefresh: () => _load(refresh: true),
       color: AppColors.primary,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
-          const _Eyebrow('KHÔNG GIAN SINH VIÊN'),
-          const SizedBox(height: 16),
-          Semantics(
-            header: true,
-            child: Text(
-              'Xin chào,\n${widget.auth.user?.fullName ?? ''}',
-              style: const TextStyle(
-                fontSize: 30,
-                height: 1.25,
-                fontWeight: FontWeight.w700,
-                color: AppColors.navy,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        'Tổng quan',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Xin chào, ${widget.auth.user?.fullName ?? ''}',
+                      style: _body,
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              IconButton(
+                key: const Key('refresh-dashboard-button'),
+                tooltip: 'Làm mới tổng quan',
+                onPressed: _loading ? null : () => _load(refresh: true),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: _loading
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: 'Đang cập nhật tổng quan',
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Theo dõi công việc và tiến độ đồ án của bạn.',
-            style: _body,
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           if (_loading && dashboard == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
-              child: Column(
-                children: [
-                  CircularProgressIndicator(
-                    semanticsLabel: 'Đang tải tổng quan',
-                  ),
-                  SizedBox(height: 16),
-                  Text('Đang tải tổng quan…', style: _body),
-                ],
-              ),
+              child: Text('Đang tải tổng quan…', style: _body),
             ),
-          if (_error != null) ...[_errorNotice(), const SizedBox(height: 24)],
+          if (_error != null) ...[_errorNotice(), const SizedBox(height: 20)],
           if (dashboard != null) ...[
             if (dashboard.semesterName != null) ...[
-              Text(dashboard.semesterName!, style: _caption),
+              Text('Học kỳ · ${dashboard.semesterName!}', style: _caption),
               const SizedBox(height: 12),
             ],
             _metrics(dashboard),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             _project(dashboard),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Row(
               children: [
                 const Expanded(child: _SectionTitle('Hạn cần theo dõi')),
@@ -219,32 +240,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _metrics(StudentDashboard dashboard) => LayoutBuilder(
     builder: (context, constraints) {
       final largeText = MediaQuery.textScalerOf(context).scale(16) > 21;
-      final columns = largeText || constraints.maxWidth < 300 ? 1 : 3;
-      final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _Metric(
-            width: width,
-            value: dashboard.assignedOpenTasks,
-            label: 'Việc đang mở',
-            icon: Icons.check_box_outlined,
-          ),
-          _Metric(
-            width: width,
-            value: dashboard.assignedOverdueTasks,
-            label: 'Việc quá hạn',
-            icon: Icons.schedule_outlined,
-            danger: dashboard.assignedOverdueTasks > 0,
-          ),
-          _Metric(
-            width: width,
-            value: dashboard.unreadNotifications,
-            label: 'Thông báo chưa đọc',
-            icon: Icons.notifications_outlined,
-          ),
-        ],
+      final stacked = largeText || constraints.maxWidth < 300;
+      final metrics = [
+        _Metric(
+          value: dashboard.assignedOpenTasks,
+          label: 'Việc đang mở',
+          icon: Icons.check_box_outlined,
+          horizontal: stacked,
+        ),
+        _Metric(
+          value: dashboard.assignedOverdueTasks,
+          label: 'Việc quá hạn',
+          icon: Icons.schedule_outlined,
+          danger: dashboard.assignedOverdueTasks > 0,
+          horizontal: stacked,
+        ),
+        _Metric(
+          value: dashboard.unreadNotifications,
+          label: 'Thông báo chưa đọc',
+          icon: Icons.notifications_outlined,
+          horizontal: stacked,
+        ),
+      ];
+      return _Surface(
+        padding: EdgeInsets.zero,
+        child: stacked
+            ? Column(
+                children: [
+                  for (var i = 0; i < metrics.length; i++) ...[
+                    if (i > 0)
+                      const Divider(height: 1, color: AppColors.border),
+                    metrics[i],
+                  ],
+                ],
+              )
+            : IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < metrics.length; i++) ...[
+                      if (i > 0)
+                        const VerticalDivider(
+                          width: 1,
+                          color: AppColors.border,
+                        ),
+                      Expanded(child: metrics[i]),
+                    ],
+                  ],
+                ),
+              ),
       );
     },
   );
@@ -255,47 +299,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Eyebrow('ĐỒ ÁN CỦA BẠN'),
-          const SizedBox(height: 16),
+          const _Eyebrow('Đồ án của bạn'),
+          const SizedBox(height: 12),
           if (project != null) ...[
-            Text(
-              project.code,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
             Semantics(
               header: true,
               child: Text(
                 project.title,
                 style: const TextStyle(
-                  fontSize: 22,
-                  height: 1.4,
+                  fontSize: 20,
+                  height: 1.35,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text,
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                dashboardStatusLabel(project.status),
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(project.code, style: _caption),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    dashboardStatusLabel(project.status),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.navy,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
             if (dashboard.teamName != null) ...[
               const SizedBox(height: 16),
@@ -308,13 +353,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 text: 'GVHD: ${project.supervisorName}',
               ),
             ],
-            const SizedBox(height: 24),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              spacing: 16,
-              runSpacing: 8,
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Tiến độ công việc', style: _body),
+                const Expanded(
+                  child: Text('Tiến độ công việc', style: _caption),
+                ),
+                const SizedBox(width: 12),
                 Text(
                   project.progressPercentage == null
                       ? '—'
@@ -417,9 +463,8 @@ class _Eyebrow extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: const TextStyle(
-      fontSize: 11,
+      fontSize: 13,
       height: 1.5,
-      letterSpacing: 1.6,
       fontWeight: FontWeight.w700,
       color: AppColors.textMuted,
     ),
@@ -470,46 +515,58 @@ class _Surface extends StatelessWidget {
 
 class _Metric extends StatelessWidget {
   const _Metric({
-    required this.width,
     required this.value,
     required this.label,
     required this.icon,
     this.danger = false,
+    this.horizontal = false,
   });
-  final double width;
   final int value;
   final String label;
   final IconData icon;
   final bool danger;
+  final bool horizontal;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: width,
-    child: _Surface(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 21,
-            color: danger ? AppColors.danger : AppColors.textMuted,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$value',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: danger ? AppColors.danger : AppColors.text,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: _caption),
-        ],
+  Widget build(BuildContext context) {
+    final color = danger ? AppColors.danger : AppColors.text;
+    final valueText = Text(
+      '$value',
+      style: TextStyle(
+        fontSize: 24,
+        height: 1.25,
+        fontWeight: FontWeight.w700,
+        color: color,
       ),
-    ),
-  );
+    );
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: horizontal
+          ? Row(
+              children: [
+                Icon(icon, size: 20, color: color),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label, style: _caption)),
+                const SizedBox(width: 12),
+                valueText,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: valueText),
+                    const SizedBox(width: 4),
+                    Icon(icon, size: 18, color: color),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(label, style: _caption),
+              ],
+            ),
+    );
+  }
 }
 
 class _InfoLine extends StatelessWidget {
@@ -543,7 +600,7 @@ class _DeadlineRow extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: deadline.isOverdue
-                  ? AppColors.surfaceMuted
+                  ? AppColors.dangerSoft
                   : AppColors.primarySoft,
               borderRadius: BorderRadius.circular(10),
             ),
@@ -556,7 +613,7 @@ class _DeadlineRow extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

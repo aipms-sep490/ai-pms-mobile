@@ -10,6 +10,7 @@ abstract final class AppColors {
   static const primarySoft = Color(0xFFFFF7ED);
   static const border = Color(0xFFD9E1EC);
   static const danger = Color(0xFFB42318);
+  static const dangerSoft = Color(0xFFFEF3F2);
   static const success = Color(0xFF0A766F);
   static const navy = Color(0xFF0F2747);
 }
@@ -88,6 +89,14 @@ ThemeData buildAppTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.surface,
       indicatorColor: AppColors.primarySoft,
+      surfaceTintColor: Colors.transparent,
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.primary
+              : AppColors.textMuted,
+        ),
+      ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,

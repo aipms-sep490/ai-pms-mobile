@@ -2,6 +2,8 @@
 
 Baseline chuyển đổi: `c4422a9`, nhánh `feat/flutter-foundation`. Kiểm tra ngày 14/11/2026 bằng Flutter 3.50.0 stable / Dart 3.14.0; không kế thừa trạng thái đạt từ Expo.
 
+Bảng đầu ghi kết quả tại mốc chuyển đổi. Kết quả UX/UI và kết nối staging mới hơn nằm ở phần tiếp theo.
+
 | Kiểm tra | Trạng thái | Bằng chứng/ghi chú |
 | --- | --- | --- |
 | SDK | Đã xác minh | SDK cục bộ `E:\tools\flutter`: Flutter 3.50.0 stable / Dart 3.14.0 |
@@ -15,6 +17,29 @@ Baseline chuyển đổi: `c4422a9`, nhánh `feat/flutter-foundation`. Kiểm tr
 | Browser UI smoke test | Đạt với fixture API | Chrome 375×812 và 812×375: login 401/success, dashboard 503/retry, profile/logout; không tràn ngang, browser storage không chứa token |
 | Native runtime và secure storage | Chưa xác minh | Cần emulator/thiết bị mục tiêu |
 | Backend/database thật | Chưa xác minh | Không suy kết quả từ mock, widget test hoặc build |
+
+## UX/UI và backend staging — 14/11/2026
+
+Nhánh `feat/mobile-workspace-ux`, baseline `def7e53`. Giữ nguyên hai tab Tổng quan/Tài khoản và các endpoint hiện có; không thêm thao tác project/task. Dùng skill `chrome-devtools` và `ui-ux-pro-max` để audit, kiểm tra trên Chrome bằng DevTools MCP.
+
+- Đăng nhập: bỏ nhãn lặp, rút gọn phần giới thiệu, giữ autofill/validation/hiện mật khẩu và thông báo đang đăng nhập.
+- Tổng quan: thu gọn header, gom số liệu cùng chiều cao, giữ cảnh báo quá hạn bằng chữ và màu; phần đồ án/tiến độ/hạn xuất hiện sớm hơn. Thêm nút làm mới 48dp có nhãn, khóa khi đang tải, giữ pull-to-refresh.
+- Tài khoản: thông tin gọn hơn; giữ logout, trạng thái đang xử lý và lỗi. Hai tab có màu icon/nhãn nhất quán.
+- Bố cục nội dung tối đa 680dp, chữ dài được xuống dòng; số liệu chuyển thành hàng dọc khi chữ lớn hoặc màn hẹp. Không thêm dependency; `pubspec.lock` được tạo lại đầy đủ bằng SDK đã chốt thay cho lockfile JSON thiếu dependency cũ.
+
+| Kiểm tra lượt UX | Kết quả |
+| --- | --- |
+| Format / analyze | Đạt; không có issue |
+| Unit/widget tests | 16 tests đạt. Mở rộng flow test để kiểm tra làm mới lỗi vẫn giữ dữ liệu, khóa nút khi đang tải, retry, màn 320×667 với text scale 200%, tài khoản và logout landscape |
+| Web release | Đạt với `--dart-define-from-file=config/local.json` trỏ tới staging; Wasm dry run đạt |
+| Chrome DevTools | Xem trực tiếp login, dashboard, tài khoản ở 390×844, 375×667 và 812×375; login/dashboard desktop 1366×768. Không thấy tràn nội dung trong các màn đã xem |
+| API staging thật | `POST /auth/login` 200, `GET /auth/me` 200, `GET /dashboards/student` 200; dữ liệu qua API, không truy cập DB trực tiếp |
+| Mất mạng / retry | DevTools Offline: thông báo lỗi kết nối và dữ liệu cũ vẫn còn; online + Thử lại gọi dashboard 200 |
+| Console | Luồng online đã kiểm tra không có error/warning; giả lập Offline tạo lỗi network dự kiến |
+
+API origin dùng khi kiểm tra: `https://api-staging.khaidz.com`, web origin `http://localhost:5173`; cấu hình công khai có tại `config/staging.json`. Không lưu tài khoản, token hoặc screenshot có thông tin cá nhân vào repo.
+
+Kết quả backend ở trên xác nhận các endpoint phục vụ dữ liệu thật cho tài khoản thử nghiệm được phép dùng; chưa xác minh tính đúng đắn toàn bộ dữ liệu DB, native runtime, iOS hoặc bản phát hành store. Android debug APK được build bởi CI của PR; APK mặc định CI vẫn dùng API emulator, không dùng làm bằng chứng kết nối staging.
 
 ## Mốc tích hợp
 

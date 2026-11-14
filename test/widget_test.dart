@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:ai_pms_mobile/app.dart';
@@ -98,6 +99,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(375, 812));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       var dashboardCalls = 0;
+      final refreshResponse = Completer<http.Response>();
       final api = ApiClient(
         origin: 'https://api.example.test',
         client: MockClient((request) async {
@@ -121,7 +123,10 @@ void main() {
               return json(user);
             case '/api/v1/dashboards/student':
               dashboardCalls++;
-              return dashboardCalls == 1 ? json({}, 503) : json(dashboard());
+              if (dashboardCalls == 4) return refreshResponse.future;
+              return dashboardCalls == 1 || dashboardCalls == 3
+                  ? json({}, 503)
+                  : json(dashboard());
             case '/api/v1/auth/logout':
               return http.Response('', 204);
             default:
@@ -154,6 +159,34 @@ void main() {
       expect(find.text('Hệ thống quản lý tiến trình đồ án'), findsOneWidget);
       expect(find.text('62%'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      final refresh = find.byKey(const Key('refresh-dashboard-button'));
+      expect(tester.getSize(refresh).shortestSide, greaterThanOrEqualTo(48));
+      await tester.tap(refresh);
+      await tester.pumpAndSettle();
+      expect(find.text('Chưa cập nhật được dữ liệu'), findsOneWidget);
+      expect(find.text('62%'), findsOneWidget);
+      expect(
+        find.text('Bạn đang xem dữ liệu từ lần tải thành công gần nhất.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Thử lại'));
+      await tester.pump();
+      expect(dashboardCalls, 4);
+      expect(tester.widget<IconButton>(refresh).onPressed, isNull);
+      expect(find.text('62%'), findsOneWidget);
+      refreshResponse.complete(json(dashboard()));
+      await tester.pumpAndSettle();
+      await tester.binding.setSurfaceSize(const Size(320, 667));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Hoàn thiện tài liệu thiết kế'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
       await tester.tap(find.text('Tài khoản').last);
       await tester.pumpAndSettle();
       expect(find.text('mobile-smoke@example.test'), findsOneWidget);
@@ -161,7 +194,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       final logout = find.byKey(const Key('sign-out-button'));
-      await tester.scrollUntilVisible(logout, 200);
+      await tester.scrollUntilVisible(
+        logout,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.pumpAndSettle();
       await tester.tap(logout);
       await tester.pumpAndSettle();

@@ -62,7 +62,7 @@ class _SignInScreenState extends State<SignInScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Container(
@@ -85,75 +85,38 @@ class _SignInScreenState extends State<SignInScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'DỰ ÁN HỌC PHẦN',
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: .8,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 44),
-                  const Text(
-                    'MỖI BƯỚC, MỘT TIẾN TRIỂN',
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 1.3,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
                   Semantics(
                     header: true,
                     child: Text(
-                      'Đồ án của bạn.\nLuôn trong tầm tay.',
-                      style: textTheme.headlineLarge,
+                      'Chào mừng trở lại',
+                      style: textTheme.headlineMedium,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Text(
-                    'Nắm tiến độ, theo dõi công việc và giữ kết nối với hành trình đồ án.',
+                    'Đăng nhập để theo dõi tiến độ và công việc đồ án của bạn.',
                     style: textTheme.bodyLarge?.copyWith(
                       color: AppColors.textMuted,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Semantics(
-                            header: true,
-                            child: Text(
-                              'Đăng nhập',
-                              style: textTheme.titleLarge,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
                           const Text('Sử dụng tài khoản được trường cấp.'),
                           const SizedBox(height: 24),
-                          const Text(
-                            'Email',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
                           TextFormField(
                             key: const Key('email-field'),
                             controller: _email,
@@ -166,7 +129,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               hintText: 'ban@truong.edu.vn',
                               labelText: 'Email',
                               floatingLabelBehavior:
-                                  FloatingLabelBehavior.never,
+                                  FloatingLabelBehavior.always,
                             ),
                             onFieldSubmitted: (_) =>
                                 _passwordFocus.requestFocus(),
@@ -176,15 +139,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 ? null
                                 : 'Nhập địa chỉ email hợp lệ.',
                           ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Mật khẩu',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 24),
                           TextFormField(
                             key: const Key('password-field'),
                             controller: _password,
@@ -199,14 +154,20 @@ class _SignInScreenState extends State<SignInScreen> {
                               hintText: 'Nhập mật khẩu',
                               labelText: 'Mật khẩu',
                               floatingLabelBehavior:
-                                  FloatingLabelBehavior.never,
+                                  FloatingLabelBehavior.always,
                               suffixIcon: IconButton(
                                 tooltip: _showPassword
                                     ? 'Ẩn mật khẩu'
                                     : 'Hiện mật khẩu',
-                                onPressed: () => setState(
-                                  () => _showPassword = !_showPassword,
+                                constraints: const BoxConstraints(
+                                  minWidth: 48,
+                                  minHeight: 48,
                                 ),
+                                onPressed: _busy
+                                    ? null
+                                    : () => setState(
+                                        () => _showPassword = !_showPassword,
+                                      ),
                                 icon: Icon(
                                   _showPassword
                                       ? Icons.visibility_off_outlined
@@ -225,7 +186,10 @@ class _SignInScreenState extends State<SignInScreen> {
                               liveRegion: true,
                               child: Text(
                                 _error!,
-                                style: const TextStyle(color: AppColors.danger),
+                                style: const TextStyle(
+                                  color: AppColors.danger,
+                                  height: 1.5,
+                                ),
                               ),
                             ),
                           ],
@@ -233,27 +197,31 @@ class _SignInScreenState extends State<SignInScreen> {
                           FilledButton(
                             key: const Key('sign-in-button'),
                             onPressed: _busy ? null : _submit,
-                            child: _busy
-                                ? const SizedBox.square(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (_busy) ...[
+                                  const SizedBox.square(
                                     dimension: 22,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: AppColors.surface,
+                                      semanticsLabel: 'Đang đăng nhập',
                                     ),
-                                  )
-                                : const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          'Đăng nhập',
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Icon(Icons.arrow_forward, size: 20),
-                                    ],
                                   ),
+                                  const SizedBox(width: 12),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    _busy ? 'Đang đăng nhập…' : 'Đăng nhập',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                if (!_busy) ...[
+                                  const SizedBox(width: 12),
+                                  const Icon(Icons.arrow_forward, size: 20),
+                                ],
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -271,9 +239,10 @@ class _SignInScreenState extends State<SignInScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Một tài khoản. Kết nối cùng không gian trên web.',
+                          'Dùng cùng tài khoản với AI-PMS trên web.',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
+                            height: 1.5,
                             color: AppColors.textMuted,
                           ),
                         ),
