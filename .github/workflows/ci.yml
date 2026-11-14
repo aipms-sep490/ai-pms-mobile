@@ -1,0 +1,39 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate and export
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: '1'
+      EXPO_PUBLIC_API_URL: http://localhost:5080
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check types, lint and logic tests
+        run: npm run check
+      - name: Check Expo package compatibility
+        run: npx expo install --check
+      - name: Export Android, iOS and web bundles
+        run: npx expo export --platform all
