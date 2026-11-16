@@ -512,7 +512,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Text(_notice!),
                       ),
-                    if (_initialized) ...[
+                    if (_initialized && _capability != null) ...[
                       Text(
                         textOf(_project!, 'title'),
                         style: Theme.of(context).textTheme.titleMedium,

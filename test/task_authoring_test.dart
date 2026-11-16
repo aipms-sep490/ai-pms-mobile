@@ -206,9 +206,11 @@ void main() {
     (tester) async {
       var version = 'version-1';
       var writes = 0;
+      var denied = false;
       final auth = await _auth(tester, (r) async {
         if (r.url.path == '/api/v1/projects/1') return json(_project);
         if (r.url.path.endsWith('/execution-actions')) {
+          if (denied) return json({}, 403);
           return json(_cap(version: version));
         }
         if (r.url.path == '/api/v1/milestones/project/1') {
@@ -261,6 +263,19 @@ void main() {
       await _tap(tester, find.widgetWithText(FilledButton, 'Lưu nội dung'));
       expect(writes, 2);
       expect(find.text('Mở trình soạn'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await _open(
+        tester,
+        TaskEditorScreen(auth: auth, projectId: 1, taskId: 12),
+      );
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'Bản đang soạn trước khi mất quyền',
+      );
+      denied = true;
+      await _tap(tester, find.widgetWithText(FilledButton, 'Lưu nội dung'));
+      expect(writes, 2);
+      expect(find.byType(TextFormField), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
