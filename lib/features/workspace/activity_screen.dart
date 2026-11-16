@@ -5,6 +5,8 @@ import '../../ui/app_theme.dart';
 import '../../ui/paged_records.dart';
 import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
+import '../ai/ai_screen.dart';
+import '../meetings/video_meeting_screen.dart';
 import 'workspace_models.dart';
 
 class ActivityScreen extends StatefulWidget {
@@ -211,10 +213,38 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               ExternalLinkButton(uri: externalUri(meeting['onlineUrl'])!),
               const SizedBox(height: 20),
             ] else if (meeting['videoChannel'] == 'IN_APP_VIDEO')
-              const ContentSection(
-                'Tham gia trực tuyến',
-                'Mở AI-PMS trên web để tham gia phòng họp tích hợp.',
+              RecordTile(
+                title: 'Phòng họp video',
+                subtitle: 'Tham gia bằng mic và camera trong app',
+                icon: Icons.video_call_outlined,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => VideoMeetingScreen(
+                      auth: widget.auth,
+                      meetingId: widget.id,
+                    ),
+                  ),
+                ),
               ),
+            RecordTile(
+              title: 'Chuẩn bị họp với AI',
+              subtitle: 'Nội dung cần trao đổi theo dữ liệu đồ án',
+              icon: Icons.auto_awesome_outlined,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => AiDocumentScreen(
+                    auth: widget.auth,
+                    title: 'Chuẩn bị họp',
+                    load: () => widget.auth.request(
+                      '/api/v1/projects/${idOf(meeting, 'projectId')}/ai/workflow-assistance?mode=MEETING_BRIEF&meetingId=${widget.id}',
+                      requestTimeout: const Duration(seconds: 90),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             if (mine != null)
               ContentSection('Phản hồi của bạn', statusText(mine['status'])),
             if (canRespond) ...[
@@ -281,6 +311,24 @@ class ReportDetailScreen extends StatelessWidget {
         return report;
       },
       content: (context, report, refresh) => [
+        RecordTile(
+          title: 'Tóm tắt báo cáo bằng AI',
+          subtitle: 'Điểm chính, rủi ro và việc tiếp theo',
+          icon: Icons.auto_awesome_outlined,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => AiDocumentScreen(
+                auth: auth,
+                title: 'Tóm tắt báo cáo',
+                load: () => auth.request(
+                  '/api/v1/projects/${idOf(report, 'projectId')}/reports/$id/summary',
+                  requestTimeout: const Duration(seconds: 90),
+                ),
+              ),
+            ),
+          ),
+        ),
         ContentSection(
           '${statusText(report['reportType'])} · ${statusText(report['status'])}',
           '${displayDate(report['periodStart'])} – ${displayDate(report['periodEnd'])}\nNgười báo cáo: ${textOf(report, 'submittedByName')}',

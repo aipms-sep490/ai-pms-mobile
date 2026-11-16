@@ -4,7 +4,7 @@
 
 `develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi MVP sinh viên — 0.2.0
+## Phạm vi sinh viên — 0.3.0
 
 - Login, khôi phục phiên và logout với tài khoản AI-PMS.
 - Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
@@ -13,10 +13,13 @@
 - Việc của tôi: tìm kiếm, lọc trạng thái/quá hạn/bị chặn, phân trang, chi tiết và lịch sử. Đổi trạng thái chỉ khi capability BE cho phép, dùng concurrency token; bị chặn bắt buộc có lý do.
 - Hộp thư: thông báo, lọc chưa đọc, đọc một/tất cả; điều hướng nội bộ kiểm tra quyền lại qua API. Nhận/từ chối lời mời nhóm của chính mình.
 - Lịch họp: chi tiết, liên kết HTTP(S) mở ngoài app, RSVP dùng token của người tham gia. Báo cáo và phản hồi giảng viên ở chế độ đọc.
+- Trò chuyện trực tiếp/nhóm/đồ án dùng cùng dữ liệu web: phân trang, trả lời, sửa/thu hồi theo quyền, thích, tệp, trạng thái đọc, tắt thông báo và tóm tắt AI. Mở qua biểu tượng chat trên thanh đầu trang.
+- Phòng họp tích hợp LiveKit: mở/tham gia/kết thúc theo capability BE, mic/camera mặc định tắt, xem video và rời phòng. Backend phải bật/cấu hình dịch vụ video và lịch phải cho phép tham gia.
+- Trợ lý AI: hỏi đáp học vụ/đồ án/kết hợp, lịch sử chung với web, tài liệu đính kèm, nguồn trích dẫn, cảnh báo/tiến độ, hỗ trợ bước tiếp theo, tóm tắt báo cáo và chuẩn bị họp; xem kết quả đã công bố.
 - Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
 - Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
 
-Code đối chiếu contract BE và staging. Test tự động dùng HTTP mock; không suy native runtime từ web/build. Xem [validation Flutter](docs/FLUTTER_VALIDATION.md), [phạm vi và contract MVP](docs/MOBILE_MVP.md) và [roadmap](docs/MOBILE_ROADMAP.md).
+Code đối chiếu contract BE và staging. Chat cập nhật khi mở bằng REST polling; chưa có external push khi app đóng. Xem [phạm vi chat/call/AI](docs/MOBILE_COLLABORATION.md), [validation](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
 
 ## Chuẩn bị môi trường
 

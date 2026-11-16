@@ -74,3 +74,17 @@ Baseline `f6f3c54`, nhánh `feat/mobile-student-mvp`. Contract đối chiếu BE
 Đã sửa các lỗi được test/audit bắt: ListTile bị lớp nền che hiệu ứng bấm; ExpansionTile dùng chung storage key với vị trí cuộn; brand đăng nhập tràn ở 320px/text 200%; hàng danh sách và nội dung dài thiếu nhãn semantics rõ ràng. Không thêm dữ liệu giả vào bản app.
 
 CI hiện build web release và `android-staging-debug-apk` với `config/staging.json`, không còn dùng API emulator cho artifact mới. Artifact giữ 7 ngày; build không thay thế nghiệm thu thiết bị/signing/store release. Không ghi credential, bearer token hoặc ảnh có thông tin cá nhân vào repo.
+
+## Chat/call/AI 0.3.0 — 16/11/2026
+
+Nhánh `feat/mobile-chat-call-ai`, baseline `797c022`; đối chiếu BE develop `9eedf9a`. Ưu tiên đồng bộ tính năng theo yêu cầu người dùng; không chờ toàn bộ ma trận nghiệm thu native để mở phạm vi.
+
+- Flutter 3.50.0 / Dart 3.14.0; lockfile sinh bởi SDK; LiveKit 2.13.2, File Picker 13.3.3, UUID 4.6.0.
+- Format/analyze đạt. 28 tests đạt, gồm hồi quy 25 tests và kiểm tra multipart replay qua refresh, binary download, ID/sequence chat 64-bit, join credential hết hạn/URL không an toàn/capability.
+- Web release staging build đạt, Wasm dry run đạt. Android debug APK phải qua job CI trước merge; iOS và runtime camera/mic trên thiết bị chưa xác minh.
+- API staging thật: login/dashboard 200; chat conversations 200 (rỗng), recipients 200, upload policy 200; lịch sử assistant và AI run 200 (rỗng); digest/rủi ro và workflow NEXT_STEPS 200. Kết quả chưa công bố trả 404.
+- Tài khoản thử hiện chỉ có lịch họp COMPLETED. Chưa gọi join/start/end phòng thật, chưa gửi tin nhắn cho người khác và chưa dùng các kết quả đọc làm bằng chứng cho media hai máy hoặc ghi DB của tính năng mới.
+- Chrome DevTools 375×667: login → danh sách chat/người nhận → AI digest → hỏi AI. POST tạo hội thoại/ask và GET đọc lại hội thoại đều 200; hội thoại đã lưu trên BE. Mô hình trả FALLBACK/tạm không khả dụng, app hiển thị đúng nội dung và giới hạn BE trả về; không khẳng định chất lượng sinh nội dung AI. Console không có warning/error trong các luồng đã xem.
+- Sửa ánh xạ evidence dùng ID có tiền tố TASK-/MS-/PR-/MTG- đúng contract BE để mở màn có kiểm tra quyền; nguồn không được hỗ trợ giữ dạng tham chiếu đọc.
+
+Không có Android SDK/emulator tại máy Windows này; iOS cần macOS/Xcode. External push, SignalR và screenshare/recording chưa được triển khai. Phạm vi và các endpoint ở [MOBILE_COLLABORATION.md](MOBILE_COLLABORATION.md).

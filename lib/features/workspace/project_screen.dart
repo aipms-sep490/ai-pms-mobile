@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
+import '../ai/ai_screen.dart';
 import '../dashboard/dashboard_model.dart';
 import 'activity_screen.dart';
 import 'tasks_screen.dart';
@@ -137,6 +138,18 @@ class ProjectScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          RecordTile(
+            title: 'Trợ lý AI & kết quả',
+            subtitle: 'Tiến độ, gợi ý, lịch sử và kết quả công bố',
+            icon: Icons.auto_awesome_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    AiHomeScreen(auth: auth, projectId: idOf(project)),
+              ),
+            ),
+          ),
           RecordTile(
             title: 'Lịch họp',
             subtitle: 'Lịch, liên kết tham gia và phản hồi',

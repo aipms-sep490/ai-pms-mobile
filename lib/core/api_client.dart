@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -11,6 +12,19 @@ class ApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class ApiUpload {
+  const ApiUpload(
+    this.name,
+    this.bytes, {
+    this.field = 'File',
+    this.contentType = 'application/octet-stream',
+  });
+  final String name;
+  final Uint8List bytes;
+  final String field;
+  final String contentType;
 }
 
 class ApiClient {
@@ -68,20 +82,40 @@ class ApiClient {
     String method = 'GET',
     Map<String, String>? headers,
     Object? body,
+    Duration? requestTimeout,
+    ApiUpload? upload,
+    bool binary = false,
   }) async {
     final uri = _requestUri(path);
-    final request = http.Request(method, uri)
+    final http.BaseRequest request;
+    if (upload != null) {
+      final multipart = http.MultipartRequest(method, uri);
+      multipart.files.add(
+        http.MultipartFile.fromBytes(
+          upload.field,
+          upload.bytes,
+          filename: upload.name,
+          contentType: http.MediaType.parse(upload.contentType),
+        ),
+      );
+      if (body is Map<String, String>) multipart.fields.addAll(body);
+      request = multipart;
+    } else {
+      final jsonRequest = http.Request(method, uri);
+      if (body != null) {
+        jsonRequest.headers['Content-Type'] = 'application/json';
+        jsonRequest.body = jsonEncode(body);
+      }
+      request = jsonRequest;
+    }
+    request
       ..followRedirects = false
       ..headers.addAll({'Accept': 'application/json', ...?headers});
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
-    }
     try {
       final response = await (() async {
         final stream = await _client.send(request);
         return http.Response.fromStream(stream);
-      })().timeout(timeout);
+      })().timeout(requestTimeout ?? timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         // Server ProblemDetails may contain private provider/database details.
         String? safeMessage;
@@ -106,6 +140,7 @@ class ApiClient {
         );
       }
       if (response.statusCode == 204 || response.bodyBytes.isEmpty) return null;
+      if (binary) return response.bodyBytes;
       try {
         return jsonDecode(utf8.decode(response.bodyBytes));
       } on FormatException {
@@ -148,5 +183,6 @@ String _statusMessage(int status) => switch (status) {
   409 => 'Dữ liệu đã thay đổi. Vui lòng tải lại trước khi tiếp tục.',
   422 => 'Thao tác chưa đáp ứng điều kiện của hệ thống.',
   429 => 'Có quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.',
+  413 => 'Tệp vượt quá dung lượng cho phép.',
   _ => 'Hệ thống chưa thể xử lý yêu cầu. Vui lòng thử lại.',
 };

@@ -2,6 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 import 'features/auth/auth_controller.dart';
 import 'features/auth/sign_in_screen.dart';
+import 'features/ai/ai_screen.dart';
+import 'features/chat/chat_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/workspace/inbox_screen.dart';
@@ -81,6 +83,33 @@ class _WorkspaceState extends State<_Workspace> {
   Widget build(BuildContext context) {
     final student = widget.auth.user?.roles.contains('STUDENT') ?? false;
     return Scaffold(
+      appBar: student
+          ? AppBar(
+              title: const Text('AI-PMS'),
+              actions: [
+                IconButton(
+                  tooltip: 'Trò chuyện',
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => ChatInboxScreen(auth: widget.auth),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Trợ lý AI',
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => AiHomeScreen(auth: widget.auth),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: IndexedStack(

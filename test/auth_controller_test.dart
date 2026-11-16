@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:ai_pms_mobile/core/api_client.dart';
 import 'package:ai_pms_mobile/core/refresh_token_store.dart';
@@ -69,6 +70,49 @@ AuthController _auth(
 );
 
 void main() {
+  test('multipart retries preserve fields and bytes after refresh; downloads stay binary', () async {
+    var uploads = 0;
+    final auth = _auth(_Store(), (request) async {
+      if (request.url.path.endsWith('/login')) return _json(_login());
+      if (request.url.path.endsWith('/me')) return _json(_user);
+      if (request.url.path.endsWith('/refresh')) return _json(_login('new'));
+      if (request.url.path.endsWith('/upload')) {
+        uploads++;
+        expect(
+          request.headers['content-type'],
+          contains('multipart/form-data'),
+        );
+        expect(request.body, contains('name="Files"; filename="note.txt"'));
+        expect(request.body, contains('name="query"'));
+        expect(request.body, contains('hello'));
+        expect(request.body, contains('the question'));
+        return _json({'ok': true}, uploads == 1 ? 401 : 200);
+      }
+      if (request.url.path.endsWith('/download')) {
+        return http.Response.bytes([0, 255, 1], 200);
+      }
+      return http.Response('', 204);
+    });
+    await auth.signIn('student@example.test', 'test-password');
+    final result = await auth.request(
+      '/api/v1/upload',
+      method: 'POST',
+      body: <String, String>{'query': 'the question'},
+      upload: ApiUpload(
+        'note.txt',
+        Uint8List.fromList(utf8.encode('hello')),
+        field: 'Files',
+        contentType: 'text/plain',
+      ),
+    );
+    expect(result, {'ok': true});
+    expect(uploads, 2);
+    expect(
+      await auth.request('/api/v1/download', binary: true),
+      orderedEquals([0, 255, 1]),
+    );
+    auth.dispose();
+  });
   test(
     'authorized writes refresh once, preserve body and never replay conflicts',
     () async {

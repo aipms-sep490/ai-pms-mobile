@@ -295,6 +295,9 @@ class AuthController extends ChangeNotifier {
     String path, {
     String method = 'GET',
     Object? body,
+    Duration? requestTimeout,
+    ApiUpload? upload,
+    bool binary = false,
   }) async {
     final version = _generation;
     final current = _session;
@@ -316,6 +319,9 @@ class AuthController extends ChangeNotifier {
         path,
         method: method,
         body: body,
+        requestTimeout: requestTimeout,
+        upload: upload,
+        binary: binary,
         headers: {'Authorization': 'Bearer $bearer'},
       );
       if (version != _generation || _disposed) throw _changedSession;
