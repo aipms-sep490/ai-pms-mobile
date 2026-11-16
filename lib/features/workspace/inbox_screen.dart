@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/paged_records.dart';
 import '../../ui/remote_page.dart';
+import '../../ui/mobile_components.dart';
 import '../auth/auth_controller.dart';
 import 'activity_screen.dart';
 import 'project_screen.dart';
@@ -16,11 +17,13 @@ class InboxScreen extends StatefulWidget {
     required this.onChanged,
     this.revision = 0,
     this.initialInvites = false,
+    this.showHeading = true,
   });
   final AuthController auth;
   final VoidCallback onChanged;
   final int revision;
   final bool initialInvites;
+  final bool showHeading;
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
@@ -93,6 +96,7 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) => PagedRecords(
     auth: widget.auth,
     title: 'Hộp thư',
+    showHeading: widget.showHeading,
     revision: widget.revision + _revision,
     path: _invites
         ? '/api/v1/teams/invitations'
@@ -103,9 +107,7 @@ class _InboxScreenState extends State<InboxScreen> {
         ? 'Bạn đã đọc hết thông báo.'
         : 'Chưa có thông báo.',
     leading: [
-      Wrap(
-        spacing: 8,
-        runSpacing: 4,
+      HorizontalChoices(
         children: [
           ChoiceChip(
             label: const Text('Thông báo'),
@@ -236,7 +238,7 @@ class _InboxScreenState extends State<InboxScreen> {
                             ),
                       child: const Text('Chấp nhận'),
                     ),
-                    OutlinedButton(
+                    TextButton(
                       onPressed: _saving
                           ? null
                           : () => _mutate(
@@ -272,6 +274,7 @@ class NotificationScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Thông báo')),
     body: RemotePage<Json>(
       title: 'Thông báo',
+      showHeading: false,
       load: () async {
         // Read status belongs to this recipient. The backend revalidates access.
         await auth.request(
@@ -330,7 +333,12 @@ Future<void> openEntity(
     case 'PROJECT':
       screen = Scaffold(
         appBar: AppBar(title: const Text('Đồ án')),
-        body: ProjectScreen(auth: auth, id: target.id, onChanged: onChanged),
+        body: ProjectScreen(
+          auth: auth,
+          id: target.id,
+          onChanged: onChanged,
+          showHeading: false,
+        ),
       );
     case 'TEAM':
       screen = TeamDetailScreen(auth: auth, id: target.id);
@@ -340,6 +348,7 @@ Future<void> openEntity(
         body: InboxScreen(
           auth: auth,
           initialInvites: true,
+          showHeading: false,
           onChanged: onChanged,
         ),
       );

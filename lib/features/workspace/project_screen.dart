@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../ui/remote_page.dart';
+import '../../ui/mobile_components.dart';
 import '../auth/auth_controller.dart';
 import '../ai/ai_screen.dart';
 import '../dashboard/dashboard_model.dart';
@@ -23,11 +24,13 @@ class ProjectScreen extends StatelessWidget {
     required this.onChanged,
     this.revision = 0,
     this.id,
+    this.showHeading = true,
   });
   final AuthController auth;
   final VoidCallback onChanged;
   final int revision;
   final int? id;
+  final bool showHeading;
 
   Future<_ProjectData> _load() async {
     final overview = StudentDashboard.fromJson(
@@ -74,6 +77,7 @@ class ProjectScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => RemotePage<_ProjectData>(
     title: 'Đồ án',
+    showHeading: showHeading,
     revision: revision,
     load: _load,
     content: (context, data, refresh) {
@@ -113,6 +117,8 @@ class ProjectScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   textOf(project, 'title'),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
@@ -138,46 +144,48 @@ class ProjectScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          RecordTile(
-            title: 'Trợ lý AI & kết quả',
-            subtitle: 'Tiến độ, gợi ý, lịch sử và kết quả công bố',
-            icon: Icons.auto_awesome_outlined,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) =>
-                    AiHomeScreen(auth: auth, projectId: idOf(project)),
+          HorizontalChoices(
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.auto_awesome_outlined, size: 18),
+                label: const Text('Trợ lý AI'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        AiHomeScreen(auth: auth, projectId: idOf(project)),
+                  ),
+                ),
               ),
-            ),
-          ),
-          RecordTile(
-            title: 'Lịch họp',
-            subtitle: 'Lịch, liên kết tham gia và phản hồi',
-            icon: Icons.event_outlined,
-            onTap: () => open(
-              ActivityScreen(
-                auth: auth,
-                projectId: idOf(project),
-                meetings: true,
-                onChanged: onChanged,
+              ActionChip(
+                avatar: const Icon(Icons.event_outlined, size: 18),
+                label: const Text('Lịch họp'),
+                onPressed: () => open(
+                  ActivityScreen(
+                    auth: auth,
+                    projectId: idOf(project),
+                    meetings: true,
+                    onChanged: onChanged,
+                  ),
+                  'Lịch họp',
+                ),
               ),
-              'Lịch họp',
-            ),
-          ),
-          RecordTile(
-            title: 'Báo cáo & phản hồi',
-            subtitle: 'Đọc báo cáo tiến độ và góp ý từ giảng viên',
-            icon: Icons.fact_check_outlined,
-            onTap: () => open(
-              ActivityScreen(
-                auth: auth,
-                projectId: idOf(project),
-                meetings: false,
-                onChanged: onChanged,
+              ActionChip(
+                avatar: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Báo cáo & phản hồi'),
+                onPressed: () => open(
+                  ActivityScreen(
+                    auth: auth,
+                    projectId: idOf(project),
+                    meetings: false,
+                    onChanged: onChanged,
+                  ),
+                  'Báo cáo & phản hồi',
+                ),
               ),
-              'Báo cáo & phản hồi',
-            ),
+            ],
           ),
+          const SizedBox(height: 16),
           Surface(
             padding: EdgeInsets.zero,
             child: ExpansionTile(
@@ -185,6 +193,7 @@ class ProjectScreen extends StatelessWidget {
               title: const Text('Nội dung đồ án'),
               childrenPadding: const EdgeInsets.all(20),
               children: [
+                ContentSection('Tên đồ án', textOf(project, 'title')),
                 for (final entry in const {
                   'description': 'Mô tả',
                   'objectives': 'Mục tiêu',
@@ -264,6 +273,7 @@ class TeamDetailScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Chi tiết nhóm')),
     body: RemotePage<Json>(
       title: 'Nhóm thực hiện',
+      showHeading: false,
       load: () async {
         final team = await auth.getJson('/api/v1/teams/$id');
         recordsOf(team['members']);
@@ -301,6 +311,7 @@ class MilestoneScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Mốc tiến độ')),
     body: RemotePage<Json>(
       title: 'Mốc tiến độ',
+      showHeading: false,
       load: () => auth.getJson('/api/v1/milestones/$id'),
       content: (context, milestone, refresh) => [
         ContentSection(
@@ -322,6 +333,7 @@ class MilestoneScreen extends StatelessWidget {
                 appBar: AppBar(title: const Text('Công việc trong mốc')),
                 body: TasksScreen(
                   auth: auth,
+                  showHeading: false,
                   milestoneId: id,
                   onChanged: onChanged,
                 ),

@@ -4,6 +4,7 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/api_client.dart';
+import '../../ui/app_theme.dart';
 import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
 import '../workspace/workspace_models.dart';
@@ -259,6 +260,84 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
     super.dispose();
   }
 
+  String get _sessionLabel {
+    if (_session == null) {
+      return _busy
+          ? 'Đang kiểm tra phòng họp…'
+          : 'Chưa tải được thông tin phòng';
+    }
+    final session = _session?['session'];
+    if (session is! Json) return 'Phòng chưa mở';
+    return switch (session['status']) {
+      'CREATED' =>
+        session['startedAt'] == null ? 'Phòng đang chuẩn bị' : 'Phòng đang mở',
+      'LIVE' || 'ACTIVE' => 'Phòng đang mở',
+      'ENDED' => 'Phòng đã kết thúc',
+      'FAILED' => 'Phòng gặp sự cố',
+      _ => 'Đang kiểm tra trạng thái phòng',
+    };
+  }
+
+  String? get _joinWindow {
+    final window = _session?['joinWindow'];
+    if (window is! Json) return null;
+    final lines = [
+      if (textOf(window, 'availableFrom', '').isNotEmpty)
+        'Từ ${displayDate(window['availableFrom'])}',
+      if (textOf(window, 'availableUntil', '').isNotEmpty)
+        'Đến ${displayDate(window['availableUntil'])}',
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  Widget _dockControl({
+    required String label,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool leave = false,
+  }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 22),
+        const SizedBox(height: 6),
+        Text(label, textAlign: TextAlign.center),
+      ],
+    );
+    final style = ButtonStyle(
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(48, 76)),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+    );
+    return Expanded(
+      child: Tooltip(
+        message: tooltip,
+        child: leave
+            ? FilledButton(
+                style: style.copyWith(
+                  backgroundColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.disabled)
+                        ? null
+                        : AppColors.danger,
+                  ),
+                ),
+                onPressed: onPressed,
+                child: content,
+              )
+            : OutlinedButton(
+                style: style,
+                onPressed: onPressed,
+                child: content,
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = _room;
@@ -268,6 +347,19 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
       ?local,
       ...?room?.remoteParticipants.values,
     ];
+    final canJoin = _capabilities['canJoin'] == true;
+    final canStart = _capabilities['canStart'] == true;
+    final reasons = (_session?['denialReasons'] as List? ?? [])
+        .whereType<String>()
+        .where(
+          (reason) => ![
+            'VIDEO_START_FORBIDDEN',
+            'VIDEO_END_FORBIDDEN',
+          ].contains(reason),
+        )
+        .toList();
+    final microphoneOn = local?.isMicrophoneEnabled() == true;
+    final cameraOn = local?.isCameraEnabled() == true;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Phòng họp'),
@@ -277,147 +369,239 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
             onPressed: _busy ? null : _refresh,
             icon: const Icon(Icons.refresh),
           ),
+          if (room != null || _capabilities['canEnd'] == true)
+            PopupMenuButton<String>(
+              tooltip: 'Tùy chọn phòng họp',
+              enabled: !_busy,
+              onSelected: (value) async {
+                if (value == 'end') {
+                  await _end();
+                } else if (room != null) {
+                  try {
+                    await room.startAudio();
+                  } catch (_) {
+                    if (mounted) {
+                      setState(
+                        () => _error = 'Chưa phát được âm thanh. Kiểm tra thiết bị đầu ra.',
+                      );
+                    }
+                  }
+                }
+              },
+              itemBuilder: (_) => [
+                if (room != null)
+                  PopupMenuItem(
+                    value: 'audio',
+                    enabled: connected,
+                    child: const Text('Bật âm thanh'),
+                  ),
+                if (_capabilities['canEnd'] == true)
+                  const PopupMenuItem(
+                    value: 'end',
+                    child: Text('Kết thúc phòng cho mọi người'),
+                  ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            if (_busy)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Đang xử lý phòng họp',
-              ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Notice(_error!, retry: _busy ? null : _refresh),
-              ),
-            if (room == null) ...[
-              const ContentSection(
-                'Trước khi tham gia',
-                'Mic và camera mặc định tắt. Bạn có thể bật sau khi vào phòng.',
-              ),
-              if (_session != null) ...[
-                ContentSection(
-                  'Trạng thái',
-                  _session!['session'] is Json
-                      ? statusText((_session!['session'] as Json)['status'])
-                      : 'Chưa mở phòng',
-                ),
-                if (_session!['joinWindow'] is Json)
-                  ContentSection(
-                    'Khoảng thời gian tham gia',
-                    '${displayDate((_session!['joinWindow'] as Json)['availableFrom'])} – ${displayDate((_session!['joinWindow'] as Json)['availableUntil'])}',
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_busy)
+                  const LinearProgressIndicator(
+                    semanticsLabel: 'Đang xử lý phòng họp',
                   ),
-                for (final reason
-                    in (_session!['denialReasons'] as List? ?? [])
-                        .whereType<String>())
-                  ContentSection('Điều kiện tham gia', videoDenial(reason)),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    children: [
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Notice(
+                            _error!,
+                            retry: _busy ? null : _refresh,
+                          ),
+                        ),
+                      if (room == null)
+                        Surface(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.video_call_outlined,
+                                color: AppColors.primary,
+                                size: 28,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _sessionLabel,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Mic và camera mặc định tắt. Bạn có thể bật sau khi vào phòng.',
+                              ),
+                              if (_joinWindow != null) ...[
+                                const SizedBox(height: 20),
+                                const ContentSection(
+                                  'Thời gian tham gia',
+                                  null,
+                                ),
+                                Text(_joinWindow!),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Giờ theo múi giờ thiết bị.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                              if (reasons.isNotEmpty) ...[
+                                const SizedBox(height: 20),
+                                for (final reason in reasons)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Text(videoDenial(reason)),
+                                  ),
+                              ] else if (_session != null &&
+                                  !canJoin &&
+                                  !canStart) ...[
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Hiện bạn chưa thể tham gia. Cập nhật quyền hoặc đợi người chủ trì mở phòng.',
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      else ...[
+                        Surface(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                switch (room.connectionState) {
+                                  lk.ConnectionState.connected => 'Đã kết nối',
+                                  lk.ConnectionState.reconnecting =>
+                                    'Đang kết nối lại…',
+                                  lk.ConnectionState.connecting =>
+                                    'Đang kết nối…',
+                                  _ => 'Kết nối đã đóng',
+                                },
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              if (room.connectionState ==
+                                  lk.ConnectionState.reconnecting) ...[
+                                const SizedBox(height: 12),
+                                const LinearProgressIndicator(
+                                  semanticsLabel: 'Đang kết nối lại phòng họp',
+                                ),
+                              ],
+                              if (!connected &&
+                                  room.connectionState !=
+                                      lk.ConnectionState.connecting) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  room.connectionState ==
+                                          lk.ConnectionState.reconnecting
+                                      ? 'Đang khôi phục kết nối. Chờ một chút để dùng mic và camera.'
+                                      : 'Rời phòng rồi tham gia lại để kết nối.',
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ContentSection(
+                          'Người trong phòng (${participants.length})',
+                          null,
+                        ),
+                        if (participants.isEmpty)
+                          const Text('Đang tải người tham gia…'),
+                        for (final participant in participants)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _ParticipantView(participant: participant),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (room == null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: FilledButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : canJoin
+                          ? _join
+                          : canStart
+                          ? _start
+                          : null,
+                      icon: Icon(
+                        canJoin ? Icons.video_call_outlined : Icons.play_arrow,
+                      ),
+                      label: Text(
+                        _busy
+                            ? 'Đang xử lý…'
+                            : canJoin
+                            ? 'Tham gia phòng'
+                            : canStart
+                            ? 'Mở phòng họp'
+                            : 'Chưa thể tham gia',
+                      ),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _dockControl(
+                            label: microphoneOn ? 'Mic bật' : 'Mic tắt',
+                            tooltip: microphoneOn ? 'Tắt mic' : 'Bật mic',
+                            icon: microphoneOn ? Icons.mic : Icons.mic_off,
+                            onPressed: _busy || !connected || !_publishAudio
+                                ? null
+                                : () => _toggleMedia(video: false),
+                          ),
+                          const SizedBox(width: 8),
+                          _dockControl(
+                            label: cameraOn ? 'Camera bật' : 'Camera tắt',
+                            tooltip: cameraOn ? 'Tắt camera' : 'Bật camera',
+                            icon: cameraOn
+                                ? Icons.videocam
+                                : Icons.videocam_off,
+                            onPressed: _busy || !connected || !_publishVideo
+                                ? null
+                                : () => _toggleMedia(video: true),
+                          ),
+                          const SizedBox(width: 8),
+                          _dockControl(
+                            label: 'Rời phòng',
+                            tooltip: 'Rời phòng họp',
+                            icon: Icons.call_end,
+                            leave: true,
+                            onPressed: _busy
+                                ? null
+                                : () async {
+                                    await _leave();
+                                    await _refresh();
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (_capabilities['canStart'] == true)
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _start,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Mở phòng họp'),
-                    ),
-                  FilledButton.icon(
-                    onPressed: _busy || _capabilities['canJoin'] != true
-                        ? null
-                        : _join,
-                    icon: const Icon(Icons.video_call_outlined),
-                    label: const Text('Tham gia phòng'),
-                  ),
-                ],
-              ),
-            ] else ...[
-              ContentSection('Kết nối', switch (room.connectionState) {
-                lk.ConnectionState.connected => 'Đã kết nối',
-                lk.ConnectionState.reconnecting => 'Đang kết nối lại…',
-                lk.ConnectionState.connecting => 'Đang kết nối…',
-                _ => 'Đã ngắt kết nối. Rời phòng để tham gia lại.',
-              }),
-              for (final participant in participants)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _ParticipantView(participant: participant),
-                ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _busy || !connected || !_publishAudio
-                        ? null
-                        : () => _toggleMedia(video: false),
-                    icon: Icon(
-                      local?.isMicrophoneEnabled() == true
-                          ? Icons.mic
-                          : Icons.mic_off,
-                    ),
-                    label: Text(
-                      local?.isMicrophoneEnabled() == true
-                          ? 'Tắt mic'
-                          : 'Bật mic',
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _busy || !connected || !_publishVideo
-                        ? null
-                        : () => _toggleMedia(video: true),
-                    icon: Icon(
-                      local?.isCameraEnabled() == true
-                          ? Icons.videocam
-                          : Icons.videocam_off,
-                    ),
-                    label: Text(
-                      local?.isCameraEnabled() == true
-                          ? 'Tắt camera'
-                          : 'Bật camera',
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            try {
-                              await room.startAudio();
-                            } catch (_) {
-                              if (mounted) {
-                                setState(
-                                  () => _error = 'Chưa phát được âm thanh. Kiểm tra thiết bị đầu ra.',
-                                );
-                              }
-                            }
-                          },
-                    icon: const Icon(Icons.volume_up),
-                    label: const Text('Bật âm thanh'),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            await _leave();
-                            await _refresh();
-                          },
-                    icon: const Icon(Icons.call_end),
-                    label: const Text('Rời phòng'),
-                  ),
-                ],
-              ),
-            ],
-            if (_capabilities['canEnd'] == true)
-              Padding(
-                padding: const EdgeInsets.only(top: 24),
-                child: OutlinedButton(
-                  onPressed: _busy ? null : _end,
-                  child: const Text('Kết thúc phòng cho mọi người'),
-                ),
-              ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -477,8 +661,9 @@ String videoDenial(String reason) => switch (reason) {
   'VIDEO_SESSION_FAILED' => 'Phòng gặp lỗi. Người chủ trì cần mở lại phòng.',
   'MEETING_PARTICIPANT_REQUIRED' =>
     'Bạn chưa thuộc danh sách người tham gia lịch họp.',
+  'VIDEO_JOIN_FORBIDDEN' => 'Bạn hiện không có quyền tham gia phòng họp này.',
   'VIDEO_START_FORBIDDEN' => 'Chỉ người có quyền chủ trì được mở phòng.',
   'VIDEO_END_FORBIDDEN' => 'Chỉ người có quyền chủ trì được kết thúc phòng.',
   'NOT_IN_APP_VIDEO' => 'Lịch này không dùng phòng video tích hợp.',
-  _ => 'Phòng chưa khả dụng theo quyền và lịch họp hiện tại ($reason).',
+  _ => 'Phòng chưa khả dụng theo quyền và lịch họp hiện tại.',
 };

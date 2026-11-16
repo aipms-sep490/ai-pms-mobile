@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/paged_records.dart';
 import '../../ui/remote_page.dart';
+import '../../ui/mobile_components.dart';
 import '../auth/auth_controller.dart';
 import '../ai/ai_screen.dart';
 import '../meetings/video_meeting_screen.dart';
@@ -33,11 +34,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
     path:
         '/api/v1/projects/${widget.projectId}/${widget.meetings ? 'meetings' : 'progress-reports'}${_status.isEmpty ? '' : '?status=$_status'}',
     title: widget.meetings ? 'Lịch họp' : 'Báo cáo & phản hồi',
+    showHeading: false,
     emptyText: widget.meetings ? 'Không có lịch họp phù hợp.' : 'Chưa có báo cáo phù hợp. Việc soạn và nộp báo cáo được thực hiện trên web.',
     leading: [
-      Wrap(
-        spacing: 8,
-        runSpacing: 4,
+      HorizontalChoices(
         children: [
           for (final entry
               in (widget.meetings
@@ -109,6 +109,55 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   bool _saving = false;
   String? _message;
   bool _failed = false;
+  bool _choosingRsvp = false;
+
+  Future<void> _chooseRsvp(Json mine) async {
+    if (_saving || _choosingRsvp) return;
+    setState(() => _choosingRsvp = true);
+    try {
+      final selected = await showModalBottomSheet<String>(
+        context: context,
+        useSafeArea: true,
+        builder: (sheet) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Phản hồi tham gia',
+                    style: Theme.of(sheet).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  for (final entry in const {
+                    'ACCEPTED': 'Tham gia',
+                    'TENTATIVE': 'Chưa chắc',
+                    'DECLINED': 'Từ chối',
+                  }.entries)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.value),
+                      trailing: mine['status'] == entry.key
+                          ? const Icon(Icons.check_circle_outline)
+                          : null,
+                      onTap: mine['status'] == entry.key
+                          ? null
+                          : () => Navigator.pop(sheet, entry.key),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      if (mounted && selected != null) await _respond(mine, selected);
+    } finally {
+      if (mounted) setState(() => _choosingRsvp = false);
+    }
+  }
 
   Future<(Json, Json, Json)> _load() async {
     final meeting = await widget.auth.getJson('/api/v1/meetings/${widget.id}');
@@ -173,6 +222,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       ),
       body: RemotePage<(Json, Json, Json)>(
         title: 'Lịch họp',
+        showHeading: false,
         revision: _revision,
         load: _load,
         content: (context, data, refresh) {
@@ -207,39 +257,48 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               'Thời gian',
               '${displayDate(meeting['startAt'])}\nĐến ${displayDate(meeting['endAt'])}\nGiờ theo thiết bị.',
             ),
-            ContentSection('Địa điểm', textOf(meeting, 'location', '')),
+            if (textOf(meeting, 'location', '').isNotEmpty)
+              ContentSection('Địa điểm', textOf(meeting, 'location', '')),
             if (meeting['status'] == 'SCHEDULED' &&
                 externalUri(meeting['onlineUrl']) != null) ...[
               ExternalLinkButton(uri: externalUri(meeting['onlineUrl'])!),
               const SizedBox(height: 20),
             ] else if (meeting['videoChannel'] == 'IN_APP_VIDEO')
-              RecordTile(
-                title: 'Phòng họp video',
-                subtitle: 'Tham gia bằng mic và camera trong app',
-                icon: Icons.video_call_outlined,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => VideoMeetingScreen(
-                      auth: widget.auth,
-                      meetingId: widget.id,
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: FilledButton.icon(
+                  label: Text(
+                    meeting['status'] == 'SCHEDULED'
+                        ? 'Phòng họp video'
+                        : 'Xem phòng họp',
+                  ),
+                  icon: const Icon(Icons.video_call_outlined),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => VideoMeetingScreen(
+                        auth: widget.auth,
+                        meetingId: widget.id,
+                      ),
                     ),
                   ),
                 ),
               ),
-            RecordTile(
-              title: 'Chuẩn bị họp với AI',
-              subtitle: 'Nội dung cần trao đổi theo dữ liệu đồ án',
-              icon: Icons.auto_awesome_outlined,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => AiDocumentScreen(
-                    auth: widget.auth,
-                    title: 'Chuẩn bị họp',
-                    load: () => widget.auth.request(
-                      '/api/v1/projects/${idOf(meeting, 'projectId')}/ai/workflow-assistance?mode=MEETING_BRIEF&meetingId=${widget.id}',
-                      requestTimeout: const Duration(seconds: 90),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                label: const Text('Chuẩn bị họp với AI'),
+                icon: const Icon(Icons.auto_awesome_outlined),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => AiDocumentScreen(
+                      auth: widget.auth,
+                      title: 'Chuẩn bị họp',
+                      load: () => widget.auth.request(
+                        '/api/v1/projects/${idOf(meeting, 'projectId')}/ai/workflow-assistance?mode=MEETING_BRIEF&meetingId=${widget.id}',
+                        requestTimeout: const Duration(seconds: 90),
+                      ),
                     ),
                   ),
                 ),
@@ -248,22 +307,15 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
             if (mine != null)
               ContentSection('Phản hồi của bạn', statusText(mine['status'])),
             if (canRespond) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final entry in const {
-                    'ACCEPTED': 'Tham gia',
-                    'TENTATIVE': 'Chưa chắc',
-                    'DECLINED': 'Từ chối',
-                  }.entries)
-                    OutlinedButton(
-                      onPressed: _saving || mine['status'] == entry.key
-                          ? null
-                          : () => _respond(mine, entry.key),
-                      child: Text(entry.value),
-                    ),
-                ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving || _choosingRsvp
+                      ? null
+                      : () => _chooseRsvp(mine),
+                  icon: const Icon(Icons.how_to_reg_outlined),
+                  label: const Text('Phản hồi tham gia'),
+                ),
               ),
               if (_saving)
                 const Padding(
@@ -305,25 +357,28 @@ class ReportDetailScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Báo cáo tiến độ')),
     body: RemotePage<Json>(
       title: 'Báo cáo & phản hồi',
+      showHeading: false,
       load: () async {
         final report = await auth.getJson('/api/v1/progress-reports/$id');
         recordsOf(report['feedbacks']);
         return report;
       },
       content: (context, report, refresh) => [
-        RecordTile(
-          title: 'Tóm tắt báo cáo bằng AI',
-          subtitle: 'Điểm chính, rủi ro và việc tiếp theo',
-          icon: Icons.auto_awesome_outlined,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => AiDocumentScreen(
-                auth: auth,
-                title: 'Tóm tắt báo cáo',
-                load: () => auth.request(
-                  '/api/v1/projects/${idOf(report, 'projectId')}/reports/$id/summary',
-                  requestTimeout: const Duration(seconds: 90),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            label: const Text('Tóm tắt báo cáo bằng AI'),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => AiDocumentScreen(
+                  auth: auth,
+                  title: 'Tóm tắt báo cáo',
+                  load: () => auth.request(
+                    '/api/v1/projects/${idOf(report, 'projectId')}/reports/$id/summary',
+                    requestTimeout: const Duration(seconds: 90),
+                  ),
                 ),
               ),
             ),

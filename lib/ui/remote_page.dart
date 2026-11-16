@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/semantics.dart';
 
 import '../core/api_client.dart';
 import '../features/workspace/workspace_models.dart';
@@ -13,22 +14,25 @@ class RemotePage<T> extends StatefulWidget {
     required this.content,
     this.revision = 0,
     this.actions = const [],
+    this.showHeading = true,
   });
   final String title;
   final Future<T> Function() load;
   final List<Widget> Function(BuildContext, T, Future<void> Function()) content;
   final int revision;
   final List<Widget> actions;
+  final bool showHeading;
 
   @override
-  State<RemotePage<T>> createState() => _RemotePageState<T>();
+  RemotePageState<T> createState() => RemotePageState<T>();
 }
 
-class _RemotePageState<T> extends State<RemotePage<T>> {
+class RemotePageState<T> extends State<RemotePage<T>> {
   T? _data;
   Object? _error;
   bool _loading = true;
   int _version = 0;
+  Future<void> refresh() => _load();
 
   @override
   void initState() {
@@ -77,77 +81,125 @@ class _RemotePageState<T> extends State<RemotePage<T>> {
   Widget build(BuildContext context) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 680),
-      child: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          key: PageStorageKey((widget.title, widget.key)),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      widget.title,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                  ),
+      child: Semantics(
+        customSemanticsActions: {
+          CustomSemanticsAction(label: 'Làm mới ${widget.title.toLowerCase()}'):
+              _load,
+        },
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: Stack(
+            children: [
+              ListView(
+                key: PageStorageKey((widget.title, widget.key)),
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
                 ),
-                ...widget.actions,
-                IconButton(
-                  tooltip: 'Làm mới ${widget.title.toLowerCase()}',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  onPressed: _loading ? null : _load,
-                  icon: _loading
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            semanticsLabel: 'Đang tải dữ liệu',
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                children: [
+                  if (widget.showHeading)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              widget.title,
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
                           ),
-                        )
-                      : const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (_error != null) ...[
-              Notice(
-                errorText(_error!),
-                retry: _loading ? null : _load,
-                detail: _data == null
-                    ? null
-                    : 'Đang hiển thị dữ liệu từ lần tải thành công gần nhất.',
+                        ),
+                        ...widget.actions,
+                        IconButton(
+                          tooltip: 'Làm mới ${widget.title.toLowerCase()}',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          onPressed: _loading ? null : _load,
+                          icon: _loading
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    semanticsLabel: 'Đang tải dữ liệu',
+                                  ),
+                                )
+                              : const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
+                  if (widget.showHeading)
+                    const SizedBox(height: 18)
+                  else if (widget.actions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        children: widget.actions,
+                      ),
+                    ),
+                  if (_error != null) ...[
+                    Notice(
+                      errorText(_error!),
+                      retry: _loading ? null : _load,
+                      detail: _data == null ? null : 'Đang hiển thị dữ liệu từ lần tải thành công gần nhất.',
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_data != null)
+                    ExcludeFocus(
+                      excluding: _loading,
+                      child: AbsorbPointer(
+                        absorbing: _loading,
+                        child: Semantics(
+                          container: true,
+                          explicitChildNodes: true,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: widget.content(
+                              context,
+                              _data as T,
+                              _load,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Column(
+                        children: [
+                          SizedBox.square(
+                            dimension: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(height: 16),
+                          Text('Đang tải dữ liệu…'),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
-            if (_data != null)
-              ExcludeFocus(
-                excluding: _loading,
-                child: AbsorbPointer(
-                  absorbing: _loading,
-                  child: Semantics(
-                    container: true,
-                    explicitChildNodes: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: widget.content(context, _data as T, _load),
+              if (_loading && _data != null && !widget.showHeading)
+                const Positioned(
+                  top: 0,
+                  left: 20,
+                  right: 20,
+                  child: IgnorePointer(
+                    child: LinearProgressIndicator(
+                      minHeight: 2,
+                      semanticsLabel: 'Đang cập nhật dữ liệu',
                     ),
                   ),
                 ),
-              )
-            else if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Đang tải dữ liệu…'),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     ),
@@ -190,7 +242,7 @@ class Surface extends StatelessWidget {
   const Surface({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(18),
   });
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -200,7 +252,7 @@ class Surface extends StatelessWidget {
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
       side: const BorderSide(color: AppColors.border),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
     ),
     clipBehavior: Clip.antiAlias,
     child: Padding(padding: padding, child: child),
@@ -273,7 +325,7 @@ class RecordTile extends StatelessWidget {
     onTap: onTap,
     child: ExcludeSemantics(
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Material(
           color: AppColors.surface,
           shape: RoundedRectangleBorder(
@@ -284,14 +336,24 @@ class RecordTile extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ExcludeSemantics(
-                    child: Icon(
-                      icon,
-                      color: urgent ? AppColors.danger : AppColors.primary,
+                    child: Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: urgent
+                            ? AppColors.dangerSoft
+                            : AppColors.surfaceMuted,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 20,
+                        color: urgent ? AppColors.danger : AppColors.textMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -301,9 +363,13 @@ class RecordTile extends StatelessWidget {
                       children: [
                         Text(
                           title,
+                          maxLines: onTap == null ? null : 2,
+                          overflow: onTap == null
+                              ? null
+                              : TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 16,
-                            height: 1.45,
+                            fontSize: 15,
+                            height: 1.35,
                             fontWeight: FontWeight.w600,
                             color: AppColors.text,
                           ),
@@ -311,6 +377,10 @@ class RecordTile extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(
                           subtitle,
+                          maxLines: onTap == null ? null : 3,
+                          overflow: onTap == null
+                              ? null
+                              : TextOverflow.ellipsis,
                           style: TextStyle(
                             height: 1.5,
                             color: urgent

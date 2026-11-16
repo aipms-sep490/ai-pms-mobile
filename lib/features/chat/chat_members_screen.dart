@@ -23,6 +23,7 @@ class _ChatMembersScreenState extends State<ChatMembersScreen> {
     appBar: AppBar(title: const Text('Thành viên')),
     body: RemotePage<List<Json>>(
       title: 'Người tham gia',
+      showHeading: false,
       revision: _revision,
       load: () async {
         final query = Uri(

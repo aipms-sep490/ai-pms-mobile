@@ -4,7 +4,9 @@
 
 `develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi sinh viên — 0.4.0
+## Phạm vi sinh viên — 0.5.0
+
+UI 0.5.0 gom thao tác phụ vào sheet/menu, bộ lọc cuộn ngang, form có vùng lưu cố định và điều hướng tab có thể vuốt. Xem [audit, phân công và kiểm tra giao diện](docs/MOBILE_UX_REVIEW.md).
 
 - Login, khôi phục phiên và logout với tài khoản AI-PMS.
 - Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/api_client.dart';
+import '../../ui/app_theme.dart';
+import '../../ui/mobile_components.dart';
 import '../../ui/remote_page.dart';
 import '../../ui/paged_records.dart';
 import '../auth/auth_controller.dart';
@@ -12,6 +14,125 @@ import '../workspace/workspace_models.dart';
 import '../workspace/task_editor_screen.dart';
 
 const _aiTimeout = Duration(seconds: 90);
+
+String _scopeLabel(String scope) => switch (scope) {
+  'PROJECT' => 'Đồ án',
+  'COMBINED' => 'Đồ án & học vụ',
+  _ => 'Học vụ',
+};
+String _modeLabel(String mode) => switch (mode) {
+  'PROGRESS' => 'Tiến độ',
+  'TASK' => 'Nháp công việc',
+  _ => 'Hỏi tự do',
+};
+
+class _AiQuestion extends StatelessWidget {
+  const _AiQuestion(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerRight,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width.clamp(0, 720) * .85,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: SelectableBody(text),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A small, inert reader: headings, lists and bold text; no HTML or URL actions.
+class _AiReadingSection extends StatelessWidget {
+  const _AiReadingSection(this.title, this.content);
+  final String title;
+  final String? content;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        if (content != null) ...[
+          const SizedBox(height: 8),
+          SelectionArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final raw
+                    in (content!.trim().isEmpty
+                            ? 'Chưa có thông tin.'
+                            : content!)
+                        .split('\n'))
+                  if (raw.trim().isEmpty)
+                    const SizedBox(height: 8)
+                  else
+                    Builder(
+                      builder: (context) {
+                        final heading = RegExp(r'^#{1,6}\s+').hasMatch(raw);
+                        final line = raw
+                            .replaceFirst(RegExp(r'^#{1,6}\s+'), '')
+                            .replaceFirst(RegExp(r'^\s*[-*]\s+'), '• ');
+                        final spans = <TextSpan>[];
+                        var end = 0;
+                        for (final match in RegExp(
+                          r'\*\*([^*]+)\*\*',
+                        ).allMatches(line)) {
+                          spans.add(
+                            TextSpan(text: line.substring(end, match.start)),
+                          );
+                          spans.add(
+                            TextSpan(
+                              text: match.group(1),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          );
+                          end = match.end;
+                        }
+                        spans.add(TextSpan(text: line.substring(end)));
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Semantics(
+                            header: heading,
+                            child: Text.rich(
+                              TextSpan(children: spans),
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    fontWeight: heading
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
 
 EntityTarget? aiEvidenceTarget(Json source) {
   final type = textOf(source, 'sourceType', '').toUpperCase();
@@ -40,6 +161,7 @@ class AiHomeScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Trợ lý AI')),
     body: RemotePage<Json>(
       title: 'AI đồng hành',
+      showHeading: false,
       load: () async {
         final dashboard = StudentDashboard.fromJson(
           await auth.getJson('/api/v1/dashboards/student'),
@@ -53,17 +175,35 @@ class AiHomeScreen extends StatelessWidget {
           MaterialPageRoute<void>(builder: (_) => screen),
         );
         return [
-          const Text(
-            'Hỏi về đồ án, quy định học vụ và các bước tiếp theo. Câu trả lời có nguồn tham chiếu và giới hạn dữ liệu.',
+          Surface(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.auto_awesome_outlined,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Cùng tìm bước tiếp theo',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Hỏi về đồ án hoặc học vụ. Xem nguồn tham chiếu trước khi áp dụng gợi ý.',
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add_comment_outlined),
+                  label: const Text('Hỏi trợ lý AI'),
+                  onPressed: () =>
+                      open(AssistantChatScreen(auth: auth, projectId: id)),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          RecordTile(
-            title: 'Hỏi trợ lý AI',
-            subtitle: 'Hội thoại được lưu chung với bản web',
-            icon: Icons.auto_awesome_outlined,
-            onTap: () => open(AssistantChatScreen(auth: auth, projectId: id)),
-          ),
-          RecordTile(
+          const SizedBox(height: 12),
+          _AiShortcut(
             title: 'Lịch sử hội thoại',
             subtitle: 'Mở lại trao đổi trước đây',
             icon: Icons.history,
@@ -71,13 +211,15 @@ class AiHomeScreen extends StatelessWidget {
                 open(AssistantHistoryScreen(auth: auth, projectId: id)),
           ),
           if (id != null) ...[
-            RecordTile(
+            _AiShortcut(
               title: 'Lịch sử học vụ chung',
               subtitle: 'Các hội thoại không gắn với đồ án',
               icon: Icons.menu_book_outlined,
               onTap: () => open(AssistantHistoryScreen(auth: auth)),
             ),
-            RecordTile(
+            const SizedBox(height: 20),
+            const ContentSection('Theo dõi đồ án', null),
+            _AiShortcut(
               title: 'Cảnh báo & tiến độ AI',
               subtitle: 'Rủi ro, dấu hiệu và việc nên ưu tiên',
               icon: Icons.insights_outlined,
@@ -94,7 +236,7 @@ class AiHomeScreen extends StatelessWidget {
               'BLOCKERS': 'Vì sao bị chặn?',
               'SUBMISSION_CHECK': 'Kiểm tra trước khi nộp',
             }.entries)
-              RecordTile(
+              _AiShortcut(
                 title: entry.value,
                 subtitle: 'Gợi ý theo trạng thái hiện tại',
                 icon: Icons.assistant_outlined,
@@ -109,13 +251,15 @@ class AiHomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            RecordTile(
+            const SizedBox(height: 20),
+            const ContentSection('Phân tích & kết quả', null),
+            _AiShortcut(
               title: 'Lịch sử phân tích AI',
               subtitle: 'Các kết quả đã được lưu trên hệ thống',
               icon: Icons.manage_search,
               onTap: () => open(AiRunsScreen(auth: auth, projectId: id)),
             ),
-            RecordTile(
+            _AiShortcut(
               title: 'Phân tích tiến độ mới',
               subtitle: 'Tạo và lưu một lần phân tích theo dữ liệu hiện tại',
               icon: Icons.analytics_outlined,
@@ -131,7 +275,7 @@ class AiHomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            RecordTile(
+            _AiShortcut(
               title: 'Kết quả đã công bố',
               subtitle: 'Điểm và kết quả do hệ thống công bố',
               icon: Icons.school_outlined,
@@ -142,6 +286,28 @@ class AiHomeScreen extends StatelessWidget {
         ];
       },
     ),
+  );
+}
+
+class _AiShortcut extends StatelessWidget {
+  const _AiShortcut({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+    leading: Icon(icon, color: AppColors.primary),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: onTap,
   );
 }
 
@@ -160,6 +326,7 @@ class AiDocumentScreen extends StatelessWidget {
     appBar: AppBar(title: Text(title)),
     body: RemotePage<Json>(
       title: title,
+      showHeading: false,
       load: () async => objectOf(await load()),
       content: (context, data, refresh) => aiContent(context, auth, data),
     ),
@@ -171,6 +338,7 @@ List<Widget> aiContent(
   AuthController auth,
   Json data, {
   int? projectId,
+  bool includeFooter = true,
 }) {
   final draftProjectId =
       projectId ?? (data['projectId'] is int ? data['projectId'] as int : null);
@@ -187,6 +355,7 @@ List<Widget> aiContent(
       auth,
       data['answer'] as Json,
       projectId: draftProjectId,
+      includeFooter: includeFooter,
     );
   }
   if (data['reportSummary'] is Json) {
@@ -195,6 +364,7 @@ List<Widget> aiContent(
       auth,
       data['reportSummary'] as Json,
       projectId: draftProjectId,
+      includeFooter: includeFooter,
     );
   }
   if (data['progressAnalysis'] is Json) {
@@ -203,6 +373,7 @@ List<Widget> aiContent(
       auth,
       data['progressAnalysis'] as Json,
       projectId: draftProjectId,
+      includeFooter: includeFooter,
     );
   }
   final widgets = <Widget>[];
@@ -214,7 +385,7 @@ List<Widget> aiContent(
   if (data['insufficientEvidence'] == true ||
       data['dataStatus'] == 'INSUFFICIENT_DATA') {
     widgets.add(
-      const ContentSection(
+      const _AiReadingSection(
         'Chưa đủ dữ liệu',
         'Một số kết luận chưa thể xác định từ dữ liệu trong phạm vi của bạn.',
       ),
@@ -222,7 +393,7 @@ List<Widget> aiContent(
   }
   if (data['riskLevel'] is String) {
     widgets.add(
-      ContentSection('Mức rủi ro', switch (data['riskLevel']) {
+      _AiReadingSection('Mức rủi ro', switch (data['riskLevel']) {
         'LOW' => 'Thấp',
         'MEDIUM' => 'Trung bình',
         'HIGH' => 'Cao',
@@ -232,10 +403,10 @@ List<Widget> aiContent(
     );
   }
   if (data['answer'] is String) {
-    widgets.add(ContentSection('Trả lời', data['answer'] as String));
+    widgets.add(_AiReadingSection('Trả lời', data['answer'] as String));
   }
   if (data['summary'] is String) {
-    widgets.add(ContentSection('Tóm tắt', data['summary'] as String));
+    widgets.add(_AiReadingSection('Tóm tắt', data['summary'] as String));
   }
   if (data['summary'] is Json) {
     final summary = data['summary'] as Json;
@@ -246,13 +417,15 @@ List<Widget> aiContent(
       'risks': 'Rủi ro',
       'nextActions': 'Bước tiếp theo',
     }.entries) {
-      widgets.add(ContentSection(entry.value, textOf(summary, entry.key, '')));
+      widgets.add(
+        _AiReadingSection(entry.value, textOf(summary, entry.key, '')),
+      );
     }
   }
   if (data['progressSummary'] is Json && data['dataStatus'] == 'SUFFICIENT') {
     final progress = data['progressSummary'] as Json;
     widgets.add(
-      ContentSection(
+      _AiReadingSection(
         'Tiến độ công việc',
         '${progress['progressPercentage']}% · ${progress['doneTasks']}/${progress['totalTasks']} việc hoàn tất\n${progress['overdueTasks']} quá hạn · ${progress['blockedTasks']} bị chặn',
       ),
@@ -261,7 +434,7 @@ List<Widget> aiContent(
   for (final key in ['signals', 'factors', 'items']) {
     for (final item in recordsOf(data[key] ?? [])) {
       widgets.add(
-        ContentSection(
+        _AiReadingSection(
           textOf(
             item,
             'title',
@@ -284,19 +457,19 @@ List<Widget> aiContent(
     final value = data[entry.key];
     if (value is List && value.isNotEmpty) {
       widgets.add(
-        ContentSection(
+        _AiReadingSection(
           entry.value,
           value.whereType<String>().map((s) => '• $s').join('\n'),
         ),
       );
     }
     if (value is String && value.isNotEmpty) {
-      widgets.add(ContentSection(entry.value, value));
+      widgets.add(_AiReadingSection(entry.value, value));
     }
   }
   for (final item in recordsOf(data['actionItems'] ?? [])) {
     widgets.add(
-      ContentSection(
+      _AiReadingSection(
         textOf(item, 'title'),
         '${textOf(item, 'ownerName', 'Chưa xác định người phụ trách')}\n${item['dueAt'] == null ? 'Chưa có hạn' : displayDate(item['dueAt'])}',
       ),
@@ -304,14 +477,14 @@ List<Widget> aiContent(
   }
   if (data['limitationNote'] is String) {
     widgets.add(
-      ContentSection('Lưu ý về kết quả', data['limitationNote'] as String),
+      _AiReadingSection('Lưu ý về kết quả', data['limitationNote'] as String),
     );
   }
   if (data['draft'] is Json) {
     final draft = data['draft'] as Json;
     final text =
         '${textOf(draft, 'title', '')}\n${textOf(draft, 'description', '')}';
-    widgets.add(ContentSection('Bản gợi ý', text));
+    widgets.add(_AiReadingSection('Bản gợi ý', text));
     widgets.add(
       const Text('Gợi ý chưa được lưu thành công việc, lịch hoặc báo cáo.'),
     );
@@ -345,7 +518,7 @@ List<Widget> aiContent(
   }
   final evidence = recordsOf(data['evidence'] ?? data['projectEvidence'] ?? []);
   if (evidence.isNotEmpty) {
-    widgets.add(const ContentSection('Nguồn tham chiếu', null));
+    widgets.add(const _AiReadingSection('Nguồn tham chiếu', null));
   }
   for (final source in evidence) {
     final target = aiEvidenceTarget(source);
@@ -390,19 +563,23 @@ List<Widget> aiContent(
   }
   if (data['excerpt'] is String) {
     widgets.add(
-      ContentSection(
+      _AiReadingSection(
         textOf(data, 'title', 'Nguồn học vụ'),
         data['excerpt'] as String,
       ),
     );
   }
   if (widgets.isEmpty) widgets.add(const Text('Chưa có nội dung để hiển thị.'));
-  widgets.add(const SizedBox(height: 16));
-  widgets.add(
-    const Text(
-      'AI hỗ trợ tham khảo; quyền thao tác và kết quả chính thức do hệ thống quyết định.',
-    ),
-  );
+  if (includeFooter) {
+    widgets.add(
+      Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: const Text(
+          'AI hỗ trợ tham khảo; quyền thao tác và kết quả chính thức do hệ thống quyết định.',
+        ),
+      ),
+    );
+  }
   return widgets;
 }
 
@@ -425,6 +602,7 @@ class _AssistantHistoryScreenState extends State<AssistantHistoryScreen> {
     appBar: AppBar(title: const Text('Hội thoại AI')),
     body: RemotePage<List<Json>>(
       title: 'Lịch sử trợ lý',
+      showHeading: false,
       revision: _revision,
       load: () async {
         final query = Uri(
@@ -528,6 +706,22 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     super.dispose();
   }
 
+  void _revealLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final end = _scroll.position.maxScrollExtent;
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _scroll.jumpTo(end);
+      } else {
+        _scroll.animateTo(
+          end,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
   Future<void> _load({bool older = false}) async {
     if (_id == null || _loading) return;
     setState(() => _loading = true);
@@ -551,6 +745,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         _unsyncedResponse = null;
         _unsyncedQuery = null;
       });
+      if (!older) _revealLatest();
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -562,6 +757,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
             _unsyncedQuery = null;
           }
         });
+        _revealLatest();
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -575,6 +771,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     if (_busy || _loading || query.isEmpty) return;
     if (query.length < 2 || query.length > 2000) {
       setState(() => _error = 'Câu hỏi cần từ 2 đến 2000 ký tự.');
+      _revealLatest();
       return;
     }
     setState(() {
@@ -630,7 +827,10 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       await _load();
     } catch (error) {
       if (error is ApiException && error.statusCode == 409) await _load();
-      if (mounted) setState(() => _error = errorText(error));
+      if (mounted) {
+        setState(() => _error = errorText(error));
+        _revealLatest();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -666,160 +866,277 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         ),
       );
     } catch (error) {
-      if (mounted) setState(() => _error = errorText(error));
+      if (mounted) {
+        setState(() => _error = errorText(error));
+        _revealLatest();
+      }
     }
+  }
+
+  Future<void> _options() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    var scope = _scope;
+    var mode = _mode;
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheet) => StatefulBuilder(
+        builder: (context, update) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Tùy chọn trợ lý',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _id == null
+                      ? 'Phạm vi dữ liệu'
+                      : 'Phạm vi của hội thoại: ${_scopeLabel(scope)}',
+                ),
+                if (_id == null)
+                  HorizontalChoices(
+                    children: [
+                      for (final value in [
+                        'ACADEMIC',
+                        if (widget.projectId != null) ...[
+                          'PROJECT',
+                          'COMBINED',
+                        ],
+                      ])
+                        ChoiceChip(
+                          label: Text(_scopeLabel(value)),
+                          selected: scope == value,
+                          onSelected: (_) => update(() {
+                            scope = value;
+                            if (scope == 'ACADEMIC') mode = 'CHAT';
+                          }),
+                        ),
+                    ],
+                  ),
+                if (widget.projectId != null &&
+                    (scope != 'ACADEMIC' || _id == null)) ...[
+                  const SizedBox(height: 16),
+                  const Text('Cách trợ lý hỗ trợ'),
+                  for (final value in ['CHAT', 'PROGRESS', 'TASK'])
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_modeLabel(value)),
+                      subtitle: value == 'PROGRESS'
+                          ? const Text('Dùng dữ liệu hệ thống, không cần tệp.')
+                          : null,
+                      trailing: mode == value
+                          ? const Icon(Icons.check, color: AppColors.primary)
+                          : null,
+                      onTap: () => update(() {
+                        mode = value;
+                        if (mode != 'CHAT' && scope == 'ACADEMIC') {
+                          scope = 'COMBINED';
+                        }
+                      }),
+                    ),
+                ],
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      _scope = scope;
+                      _mode = mode;
+                      if (mode == 'PROGRESS') _file = null;
+                    });
+                    Navigator.pop(sheet);
+                  },
+                  child: const Text('Áp dụng'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Hỏi trợ lý AI')),
+    appBar: AppBar(
+      title: const Text(
+        'Hỏi trợ lý AI',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      actions: [
+        IconButton(
+          tooltip: 'Tùy chọn',
+          onPressed: _busy || _loading ? null : _options,
+          icon: const Icon(Icons.tune),
+        ),
+      ],
+    ),
     body: SafeArea(
-      child: Column(
-        children: [
-          if (_id == null)
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final e in {
-                  'ACADEMIC': 'Học vụ',
-                  if (widget.projectId != null) 'PROJECT': 'Đồ án',
-                  if (widget.projectId != null) 'COMBINED': 'Kết hợp',
-                }.entries)
-                  ChoiceChip(
-                    label: Text(e.value),
-                    selected: _scope == e.key,
-                    onSelected: _busy
-                        ? null
-                        : (_) => setState(() {
-                            _scope = e.key;
-                            if (_scope == 'ACADEMIC') _mode = 'CHAT';
-                          }),
-                  ),
-              ],
-            ),
-          if (_loading || _busy)
-            const LinearProgressIndicator(semanticsLabel: 'Trợ lý đang xử lý'),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Notice(_error!, retry: _busy ? null : _load),
-            ),
-          Expanded(
-            child: ListView(
-              controller: _scroll,
-              padding: const EdgeInsets.all(20),
-              children: [
-                if (_more)
-                  OutlinedButton(
-                    onPressed: _loading ? null : () => _load(older: true),
-                    child: const Text('Tin cũ hơn'),
-                  ),
-                if (_turns.isEmpty && !_loading && _unsyncedResponse == null)
-                  const ContentSection(
-                    'Bạn muốn hỏi gì?',
-                    'Ví dụ: việc nào đang chặn tiến độ? Cần chuẩn bị gì trước buổi họp? Quy định nộp báo cáo là gì?',
-                  ),
-                for (final turn in _turns) ...[
-                  Surface(child: SelectableBody(textOf(turn, 'query'))),
-                  const SizedBox(height: 16),
-                  ...aiContent(
-                    context,
-                    widget.auth,
-                    objectOf(turn['response']),
-                    projectId: widget.projectId,
-                  ),
-                  const Divider(height: 32),
-                ],
-                if (_unsyncedResponse != null) ...[
-                  Surface(child: SelectableBody(_unsyncedQuery!)),
-                  const SizedBox(height: 16),
-                  ...aiContent(
-                    context,
-                    widget.auth,
-                    _unsyncedResponse!,
-                    projectId: widget.projectId,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_file != null)
-            InputChip(
-              label: Text(_file!.name),
-              onDeleted: _busy ? null : () => setState(() => _file = null),
-            ),
-          if (widget.projectId != null &&
-              (_scope != 'ACADEMIC' || _id == null) &&
-              MediaQuery.viewInsetsOf(context).bottom == 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
+      child: LayoutBuilder(
+        builder: (context, viewport) => Column(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: _scroll,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(20),
                 children: [
-                  for (final entry in const {
-                    'CHAT': 'Hỏi tự do',
-                    'PROGRESS': 'Tiến độ & deadline',
-                    'TASK': 'Nháp công việc',
-                  }.entries)
-                    ChoiceChip(
-                      label: Text(entry.value),
-                      selected: _mode == entry.key,
-                      onSelected: _busy || _loading
-                          ? null
-                          : (_) => setState(() {
-                              _mode = entry.key;
-                              if (_mode != 'CHAT' &&
-                                  _scope == 'ACADEMIC' &&
-                                  _id == null) {
-                                _scope = 'COMBINED';
-                              }
-                              if (_mode == 'PROGRESS') _file = null;
-                            }),
+                  Text(
+                    '${_scopeLabel(_scope)} · ${_modeLabel(_mode)}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_loading || _busy)
+                    const LinearProgressIndicator(
+                      semanticsLabel: 'Trợ lý đang xử lý',
+                    ),
+
+                  if (_more)
+                    OutlinedButton(
+                      onPressed: _loading ? null : () => _load(older: true),
+                      child: const Text('Tin cũ hơn'),
+                    ),
+                  if (_turns.isEmpty && !_loading && _unsyncedResponse == null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const ContentSection(
+                          'Bạn muốn hỏi gì?',
+                          'Chọn một gợi ý hoặc viết câu hỏi bên dưới. AI chỉ dùng dữ liệu trong phạm vi bạn được phép xem.',
+                        ),
+                        for (final prompt in [
+                          if (widget.projectId != null)
+                            'Việc nào đang chặn tiến độ?',
+                          'Cần chuẩn bị gì trước buổi họp?',
+                          'Quy định nộp báo cáo là gì?',
+                        ])
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(prompt),
+                            trailing: const Icon(Icons.north_west, size: 18),
+                            onTap: _busy ? null : () => _query.text = prompt,
+                          ),
+                      ],
+                    ),
+                  for (final turn in _turns) ...[
+                    _AiQuestion(textOf(turn, 'query')),
+                    const SizedBox(height: 16),
+                    ...aiContent(
+                      context,
+                      widget.auth,
+                      objectOf(turn['response']),
+                      projectId: widget.projectId,
+                      includeFooter: false,
+                    ),
+                    const Divider(height: 32),
+                  ],
+                  if (_unsyncedResponse != null) ...[
+                    _AiQuestion(_unsyncedQuery!),
+                    const SizedBox(height: 16),
+                    ...aiContent(
+                      context,
+                      widget.auth,
+                      _unsyncedResponse!,
+                      projectId: widget.projectId,
+                      includeFooter: false,
+                    ),
+                  ],
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Notice(
+                        _error!,
+                        retry: _busy || _id == null ? null : _load,
+                      ),
                     ),
                 ],
               ),
             ),
-          if (_mode == 'PROGRESS' &&
-              MediaQuery.viewInsetsOf(context).bottom == 0)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Dùng dữ liệu tiến độ từ hệ thống. Không cần đính kèm tệp.',
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: viewport.maxHeight * .5),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_file != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: InputChip(
+                            label: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.sizeOf(context).width - 120,
+                              ),
+                              child: Text(
+                                _file!.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            onDeleted: _busy
+                                ? null
+                                : () => setState(() => _file = null),
+                          ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            tooltip: 'Đính kèm tài liệu cho AI',
+                            onPressed: _busy || _mode == 'PROGRESS'
+                                ? null
+                                : _attach,
+                            icon: const Icon(Icons.attach_file),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: _query,
+                              enabled: !_busy,
+                              minLines: 1,
+                              maxLines: 4,
+                              maxLength: 2000,
+                              decoration: const InputDecoration(
+                                hintText: 'Câu hỏi của bạn…',
+                                counterText: '',
+                              ),
+                            ),
+                          ),
+                          IconButton.filled(
+                            tooltip: _mode == 'PROGRESS'
+                                ? 'Xem tiến độ'
+                                : 'Gửi câu hỏi',
+                            onPressed: _busy || _loading ? null : _ask,
+                            icon: _busy
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.arrow_upward),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  tooltip: 'Đính kèm tài liệu cho AI',
-                  onPressed: _busy || _mode == 'PROGRESS' ? null : _attach,
-                  icon: const Icon(Icons.attach_file),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _query,
-                    enabled: !_busy,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: 2000,
-                    decoration: const InputDecoration(
-                      labelText: 'Câu hỏi của bạn',
-                      counterText: '',
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: _mode == 'PROGRESS' ? 'Xem tiến độ' : 'Gửi câu hỏi',
-                  onPressed: _busy || _loading ? null : _ask,
-                  icon: const Icon(Icons.send),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -834,6 +1151,7 @@ class AiRunsScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Lịch sử AI')),
     body: PagedRecords(
       auth: auth,
+      showHeading: false,
       path: '/api/v1/projects/$projectId/ai/runs',
       title: 'Phân tích đã lưu',
       emptyText: 'Chưa có phân tích AI được lưu.',
@@ -876,6 +1194,7 @@ class PublishedResultScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Kết quả đồ án')),
     body: RemotePage<Json>(
       title: 'Kết quả đã công bố',
+      showHeading: false,
       load: () async {
         await auth.getJson('/api/v1/projects/$projectId');
         try {

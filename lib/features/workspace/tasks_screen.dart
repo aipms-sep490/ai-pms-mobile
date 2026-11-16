@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/api_client.dart';
 import '../../ui/app_theme.dart';
+import '../../ui/mobile_components.dart';
 import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
 import '../dashboard/dashboard_model.dart';
@@ -15,11 +16,13 @@ class TasksScreen extends StatefulWidget {
     required this.onChanged,
     this.revision = 0,
     this.milestoneId,
+    this.showHeading = true,
   });
   final AuthController auth;
   final VoidCallback onChanged;
   final int revision;
   final int? milestoneId;
+  final bool showHeading;
   @override
   State<TasksScreen> createState() => _TasksScreenState();
 }
@@ -84,12 +87,40 @@ class _TasksScreenState extends State<TasksScreen> {
     return (dashboard, result, capability);
   }
 
+  Future<void> _create(int projectId, Future<void> Function() refresh) async {
+    final result = await Navigator.push<Json>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TaskEditorScreen(
+          auth: widget.auth,
+          projectId: projectId,
+          milestoneId: widget.milestoneId,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      widget.onChanged();
+      setState(() {
+        _mine = false;
+        _filter = 'all';
+        _search = '';
+        _page = 1;
+        _searchController.clear();
+        _revision++;
+      });
+    } else {
+      await refresh();
+    }
+  }
+
   @override
   Widget build(
     BuildContext context,
   ) => RemotePage<(StudentDashboard, PageData?, Json?)>(
     key: ValueKey('$_page/$_filter/$_search/$_mine'),
     revision: widget.revision + _revision,
+    showHeading: widget.showHeading,
     title: widget.milestoneId == null
         ? (_mine ? 'Việc của tôi' : 'Việc của đồ án')
         : 'Việc trong mốc',
@@ -105,76 +136,88 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ];
       }
+      final canCreate =
+          capability != null &&
+          executionAllowed(
+            capability,
+            type: 'PROJECT',
+            id: dashboard.project!.id,
+            projectId: dashboard.project!.id,
+            action: 'create_task',
+          );
       return [
-        Text(dashboard.project!.title),
-        if (capability != null &&
-            executionAllowed(
-              capability,
-              type: 'PROJECT',
-              id: dashboard.project!.id,
-              projectId: dashboard.project!.id,
-              action: 'create_task',
-            )) ...[
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Tạo công việc'),
-            onPressed: () async {
-              final result = await Navigator.push<Json>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TaskEditorScreen(
-                    auth: widget.auth,
-                    projectId: dashboard.project!.id,
-                    milestoneId: widget.milestoneId,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                dashboard.project!.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            if (canCreate) ...[
+              const SizedBox(width: 12),
+              Tooltip(
+                message: 'Tạo công việc',
+                excludeFromSemantics: true,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Tạo', semanticsLabel: 'Tạo công việc'),
+                  onPressed: () => _create(dashboard.project!.id, refresh),
                 ),
-              );
-              if (!mounted) return;
-              if (result != null) {
-                widget.onChanged();
-                setState(() {
-                  _mine = false;
-                  _filter = 'all';
-                  _search = '';
-                  _page = 1;
-                  _searchController.clear();
-                  _revision++;
-                });
-              } else {
-                await refresh();
-              }
-            },
-          ),
-        ],
-        const SizedBox(height: 16),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
         if (widget.milestoneId == null)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Chỉ việc của tôi'),
-            value: _mine,
-            onChanged: (value) => setState(() {
-              _mine = value;
-              _page = 1;
-            }),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: HorizontalChoices(
+              children: [
+                for (final mine in [true, false])
+                  ChoiceChip(
+                    label: Text(mine ? 'Việc của tôi' : 'Việc của đồ án'),
+                    selected: _mine == mine,
+                    onSelected: (_) => setState(() {
+                      _mine = mine;
+                      _page = 1;
+                    }),
+                  ),
+              ],
+            ),
           ),
         TextField(
           controller: _searchController,
           textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Tìm công việc',
             hintText: 'Nhập tên rồi nhấn tìm',
-            prefixIcon: Icon(Icons.search),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _search.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Xóa tìm kiếm',
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() {
+                      _searchController.clear();
+                      _search = '';
+                      _page = 1;
+                    }),
+                  ),
           ),
           onSubmitted: (value) => setState(() {
             _search = value.trim();
             _page = 1;
           }),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
+        const SizedBox(height: 8),
+        HorizontalChoices(
           children: [
             for (final entry in const {
               'all': 'Tất cả',
@@ -193,9 +236,29 @@ class _TasksScreenState extends State<TasksScreen> {
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (page.items.isEmpty)
-          const Surface(child: Text('Không có công việc phù hợp bộ lọc.')),
+          Surface(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Không có công việc phù hợp bộ lọc.'),
+                if (_filter != 'all' || _search.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    label: const Text('Xóa bộ lọc'),
+                    onPressed: () => setState(() {
+                      _filter = 'all';
+                      _search = '';
+                      _page = 1;
+                      _searchController.clear();
+                    }),
+                  ),
+                ],
+              ],
+            ),
+          ),
         for (final task in page.items)
           Builder(
             builder: (context) {
@@ -206,7 +269,12 @@ class _TasksScreenState extends State<TasksScreen> {
                   !['DONE', 'CANCELLED'].contains(task['status']);
               return RecordTile(
                 title: textOf(task, 'title'),
-                icon: Icons.check_box_outlined,
+                icon: switch (task['status']) {
+                  'DONE' => Icons.task_alt,
+                  'BLOCKED' => Icons.block_outlined,
+                  'IN_PROGRESS' => Icons.timelapse,
+                  _ => Icons.assignment_outlined,
+                },
                 urgent: overdue,
                 subtitle:
                     '${statusText(task['status'])} · Ưu tiên ${statusText(task['priority'])}\n${overdue ? 'Quá hạn' : 'Hạn'}: ${displayDate(task['dueAt'])}',
@@ -255,11 +323,64 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
+  final _pageKey = GlobalKey<RemotePageState<(TaskAccess, List<Json>)>>();
   int _revision = 0;
   bool _saving = false;
   bool _editing = false;
   String? _message;
   bool _failed = false;
+
+  Future<void> _showActions(TaskAccess access) async {
+    if (_saving || _editing) return;
+    setState(() => _editing = true);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Tùy chọn công việc',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              if (access.allows('update_task'))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Sửa nội dung'),
+                  subtitle: const Text('Tên, mô tả và thời gian'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(sheet, 'content'),
+                ),
+              if (access.allows('assign_task'))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.people_outline),
+                  title: const Text('Phân công'),
+                  subtitle: const Text('Chọn người phụ trách công việc'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(sheet, 'assignment'),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(sheet),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _editing = false);
+    if (action != null) await _edit(access, assignment: action == 'assignment');
+  }
 
   Future<void> _edit(TaskAccess access, {bool assignment = false}) async {
     if (_saving || _editing) return;
@@ -301,32 +422,35 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         context: context,
         useSafeArea: true,
         isScrollControlled: true,
-        builder: (sheet) => SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Chuyển trạng thái',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                for (final status in taskTransitions(
-                  textOf(access.task, 'status'),
-                ))
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(statusText(status)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pop(sheet, status),
+        builder: (sheet) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Chuyển trạng thái',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                TextButton(
-                  onPressed: () => Navigator.pop(sheet),
-                  child: const Text('Đóng'),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  for (final status in taskTransitions(
+                    textOf(access.task, 'status'),
+                  ))
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(statusText(status)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.pop(sheet, status),
+                    ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheet),
+                    child: const Text('Đóng'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -352,13 +476,34 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       _message = null;
     });
     try {
+      final latest = await widget.auth.getJson(
+        '/api/v1/tasks/${widget.id}/execution-actions',
+      );
+      if (latest['projectId'] != access.capability['projectId'] ||
+          !recordsOf(latest['actions']).any(
+            (action) =>
+                action['code'] == 'change_task_status' &&
+                action['allowed'] == true,
+          )) {
+        throw const ApiException(
+          'Quyền cập nhật đã thay đổi. Hãy tải lại công việc.',
+          statusCode: 403,
+        );
+      }
+      final freshAccess = TaskAccess(access.task, latest);
+      if (!freshAccess.canChange) {
+        throw const ApiException(
+          'Công việc vừa thay đổi. Hãy kiểm tra trạng thái mới trước khi cập nhật.',
+          statusCode: 409,
+        );
+      }
       await widget.auth.request(
         '/api/v1/tasks/${widget.id}/status',
         method: 'PUT',
         body: {
           'newStatus': target,
           'reason': note.isEmpty ? null : note,
-          'concurrencyToken': access.token,
+          'concurrencyToken': freshAccess.token,
         },
       );
       widget.onChanged();
@@ -392,9 +537,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       appBar: AppBar(
         title: const Text('Chi tiết công việc'),
         automaticallyImplyLeading: !_saving,
+        actions: [
+          IconButton(
+            tooltip: 'Làm mới công việc',
+            onPressed: _saving || _editing
+                ? null
+                : () => _pageKey.currentState?.refresh(),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
       body: RemotePage<(TaskAccess, List<Json>)>(
+        key: _pageKey,
         title: 'Công việc',
+        showHeading: false,
         revision: _revision,
         load: _load,
         content: (context, data, refresh) {
@@ -414,35 +570,29 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            ContentSection(
+            Text(
               textOf(task, 'title'),
-              '${statusText(task['status'])} · Ưu tiên ${statusText(task['priority'])}',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
+            const SizedBox(height: 8),
+            Text(
+              '${statusText(task['status'])} · Ưu tiên ${statusText(task['priority'])}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
             if (access.allows('update_task') ||
                 access.allows('assign_task')) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (access.allows('update_task'))
-                    OutlinedButton.icon(
-                      onPressed: _saving || _editing
-                          ? null
-                          : () => _edit(access),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Sửa nội dung'),
-                    ),
-                  if (access.allows('assign_task'))
-                    OutlinedButton.icon(
-                      onPressed: _saving || _editing
-                          ? null
-                          : () => _edit(access, assignment: true),
-                      icon: const Icon(Icons.people_outline),
-                      label: const Text('Phân công'),
-                    ),
-                ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _saving || _editing
+                      ? null
+                      : () => _showActions(access),
+                  icon: const Icon(Icons.more_horiz),
+                  label: const Text('Tùy chọn công việc'),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
             ],
             if (access.canChange &&
                 taskTransitions(textOf(task, 'status')).isNotEmpty)

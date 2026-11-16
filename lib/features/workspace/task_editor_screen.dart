@@ -62,6 +62,7 @@ class TaskEditorScreen extends StatefulWidget {
 
 class _TaskEditorScreenState extends State<TaskEditorScreen> {
   final _form = GlobalKey<FormState>();
+  final _scroll = ScrollController();
   final _title = TextEditingController();
   final _description = TextEditingController();
   Json? _project;
@@ -118,6 +119,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     _title.dispose();
     _description.dispose();
     super.dispose();
@@ -202,6 +204,15 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
           final memberIds = _members.map((row) => idOf(row, 'userId')).toSet();
           if (!_assignees.every(memberIds.contains)) _notice = 'Một số người không còn trong nhóm và đã được bỏ khỏi lựa chọn. Kiểm tra phân công trước khi lưu.';
           _assignees.retainWhere(memberIds.contains);
+        }
+        if (_creating) {
+          final majorIds = _majors.map((row) => idOf(row)).toSet();
+          if ((_primary != null && !majorIds.contains(_primary)) ||
+              !_supporting.every(majorIds.contains)) {
+            _notice = 'Phạm vi ngành vừa thay đổi. Các ngành không còn hợp lệ đã được bỏ; kiểm tra lại trước khi lưu.';
+            if (!majorIds.contains(_primary)) _primary = null;
+            _supporting.retainWhere(majorIds.contains);
+          }
         }
       });
     } catch (error) {
@@ -313,12 +324,17 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   }
 
   Future<void> _save() async {
-    if (_loading ||
-        _saving ||
-        _needsReload ||
-        _uncertainCreate ||
-        !_allowed ||
-        !_form.currentState!.validate()) {
+    if (_loading || _saving || _needsReload || _uncertainCreate || !_allowed) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    final invalid = _form.currentState!.validateGranularly();
+    if (invalid.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && invalid.first.mounted) {
+          Scrollable.ensureVisible(invalid.first.context, alignment: 0.1);
+        }
+      });
       return;
     }
     if (!widget.assignmentOnly &&
@@ -328,17 +344,20 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       setState(
         () => _error = 'Hạn hoàn thành phải từ thời gian bắt đầu trở đi.',
       );
+      _revealError();
       return;
     }
     if (_creating &&
         (_interdisciplinary || _supporting.isNotEmpty) &&
         _primary == null) {
       setState(() => _error = 'Chọn ngành chính cho công việc liên ngành.');
+      _revealError();
       return;
     }
     if (!widget.assignmentOnly &&
         !_milestones.any((m) => m['id'] == _milestone)) {
       setState(() => _error = 'Chọn mốc thuộc đồ án hiện tại.');
+      _revealError();
       return;
     }
     setState(() {
@@ -436,10 +455,15 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
             _error = 'Chưa xác nhận được kết quả tạo. Quay lại danh sách và kiểm tra trước khi tạo lại để tránh trùng công việc.';
           }
         });
+        _revealError();
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _revealError() {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
   Future<void> _discard(bool didPop) async {
@@ -467,6 +491,50 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     }
   }
 
+  Widget _section(String title, String? description, List<Widget> children) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Surface(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [ContentSection(title, description), ...children],
+          ),
+        ),
+      );
+
+  Widget _saveAction() {
+    if (_uncertainCreate) {
+      return FilledButton(
+        onPressed: _saving
+            ? null
+            : () {
+                setState(() => _dirty = false);
+                Navigator.pop(context);
+              },
+        child: const Text('Quay về danh sách để kiểm tra'),
+      );
+    }
+    if (_needsReload) {
+      return FilledButton(
+        onPressed: _loading || _saving ? null : _load,
+        child: const Text('Tải dữ liệu mới'),
+      );
+    }
+    return FilledButton(
+      onPressed: _loading || _saving || !_allowed ? null : _save,
+      child: Text(
+        _saving
+            ? 'Đang lưu…'
+            : widget.assignmentOnly
+            ? 'Lưu phân công'
+            : _creating
+            ? 'Tạo công việc'
+            : 'Lưu nội dung',
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving && !_dirty,
@@ -486,291 +554,371 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 680),
-            child: Form(
-              key: _form,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_loading || _saving)
-                      const LinearProgressIndicator(
-                        semanticsLabel: 'Đang xử lý công việc',
-                      ),
-                    if (_error != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Notice(
-                          _error!,
-                          retry: _saving || _loading || _uncertainCreate
-                              ? null
-                              : _load,
-                        ),
-                      ),
-                    if (_notice != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(_notice!),
-                      ),
-                    if (_initialized && _capability != null) ...[
-                      Text(
-                        textOf(_project!, 'title'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 20),
-                      if (!_creating && _needsReload)
-                        const Text(
-                          'Tải dữ liệu mới trước khi lưu tiếp. Bản đang soạn được giữ lại.',
-                        ),
-                      if (!_creating && _notice != null)
-                        ContentSection(
-                          'Bản hiện có trên hệ thống',
-                          '${textOf(_task!, 'title')}\nCập nhật: ${displayDate(_task!['updatedAt'])}',
-                        ),
-                      AbsorbPointer(
-                        absorbing: _saving || _loading || !_allowed,
-                        child: ExcludeFocus(
-                          excluding: _saving || _loading || !_allowed,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (!widget.assignmentOnly) ...[
-                                TextFormField(
-                                  controller: _title,
-                                  maxLength: 255,
-                                  onChanged: (_) =>
-                                      setState(() => _dirty = true),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tên công việc',
-                                  ),
-                                  validator: (v) =>
-                                      v == null || v.trim().isEmpty
-                                      ? 'Nhập tên công việc.'
-                                      : v.trim().length > 255
-                                      ? 'Tên tối đa 255 ký tự.'
-                                      : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_loading || _saving)
+                  const LinearProgressIndicator(
+                    semanticsLabel: 'Đang xử lý công việc',
+                  ),
+                Expanded(
+                  child: Form(
+                    key: _form,
+                    child: SingleChildScrollView(
+                      controller: _scroll,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Notice(
+                                _error!,
+                                retry:
+                                    _saving ||
+                                        _loading ||
+                                        _uncertainCreate ||
+                                        _initialized
+                                    ? null
+                                    : _load,
+                              ),
+                            ),
+                          if (_notice != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Semantics(
+                                liveRegion: true,
+                                child: Text(_notice!),
+                              ),
+                            ),
+                          if (!_initialized && _loading)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Text('Đang tải thông tin công việc…'),
+                            ),
+                          if (_initialized && _capability != null) ...[
+                            Text(
+                              textOf(_project!, 'title'),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 16),
+                            if (!_creating && _needsReload)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 16),
+                                child: Text(
+                                  'Tải dữ liệu mới trước khi lưu tiếp. Bản đang soạn được giữ lại.',
                                 ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<int>(
-                                  key: ValueKey('milestone/$_milestone'),
-                                  initialValue:
-                                      _milestones.any(
-                                        (m) => m['id'] == _milestone,
-                                      )
-                                      ? _milestone
-                                      : null,
-                                  isExpanded: true,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Mốc đồ án',
-                                  ),
-                                  items: [
-                                    for (final row in _milestones)
-                                      DropdownMenuItem(
-                                        value: idOf(row),
-                                        child: Text(
-                                          textOf(row, 'title'),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
+                              ),
+                            if (!_creating && _notice != null)
+                              ContentSection(
+                                'Bản hiện có trên hệ thống',
+                                '${textOf(_task!, 'title')}\nCập nhật: ${displayDate(_task!['updatedAt'])}',
+                              ),
+                            AbsorbPointer(
+                              absorbing: _saving || _loading || !_allowed,
+                              child: ExcludeFocus(
+                                excluding: _saving || _loading || !_allowed,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (!widget.assignmentOnly) ...[
+                                      _section('Nội dung', null, [
+                                        TextFormField(
+                                          controller: _title,
+                                          maxLength: 255,
+                                          textCapitalization:
+                                              TextCapitalization.sentences,
+                                          textInputAction: TextInputAction.next,
+                                          onChanged: (_) =>
+                                              setState(() => _dirty = true),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Tên công việc',
+                                          ),
+                                          validator: (v) =>
+                                              v == null || v.trim().isEmpty
+                                              ? 'Nhập tên công việc.'
+                                              : v.trim().length > 255
+                                              ? 'Tên tối đa 255 ký tự.'
+                                              : null,
                                         ),
+                                        const SizedBox(height: 16),
+                                        DropdownButtonFormField<int>(
+                                          key: ValueKey(
+                                            'milestone/$_milestone',
+                                          ),
+                                          initialValue:
+                                              _milestones.any(
+                                                (m) => m['id'] == _milestone,
+                                              )
+                                              ? _milestone
+                                              : null,
+                                          isExpanded: true,
+                                          itemHeight: null,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Mốc đồ án',
+                                          ),
+                                          items: [
+                                            for (final row in _milestones)
+                                              DropdownMenuItem(
+                                                value: idOf(row),
+                                                child: Text(
+                                                  textOf(row, 'title'),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                          ],
+                                          onChanged: (v) => setState(() {
+                                            _milestone = v;
+                                            _dirty = true;
+                                          }),
+                                          validator: (v) => v == null
+                                              ? 'Chọn mốc đồ án.'
+                                              : null,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        TextFormField(
+                                          controller: _description,
+                                          minLines: 3,
+                                          maxLines: 8,
+                                          maxLength: 10000,
+                                          textCapitalization:
+                                              TextCapitalization.sentences,
+                                          onChanged: (_) =>
+                                              setState(() => _dirty = true),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Mô tả (không bắt buộc)',
+                                            alignLabelWithHint: true,
+                                          ),
+                                          validator: (v) =>
+                                              (v?.length ?? 0) > 10000
+                                              ? 'Mô tả tối đa 10000 ký tự.'
+                                              : null,
+                                        ),
+                                      ]),
+                                      _section(
+                                        'Kế hoạch',
+                                        'Ngày giờ theo múi giờ thiết bị.',
+                                        [
+                                          DropdownButtonFormField<String>(
+                                            initialValue: _priority,
+                                            isExpanded: true,
+                                            itemHeight: null,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Ưu tiên',
+                                            ),
+                                            items: [
+                                              const DropdownMenuItem(
+                                                value: null,
+                                                child: Text('Chưa chọn'),
+                                              ),
+                                              for (final v in [
+                                                'LOW',
+                                                'MEDIUM',
+                                                'HIGH',
+                                                'CRITICAL',
+                                              ])
+                                                DropdownMenuItem(
+                                                  value: v,
+                                                  child: Text(statusText(v)),
+                                                ),
+                                            ],
+                                            onChanged: (v) => setState(() {
+                                              _priority = v;
+                                              _dirty = true;
+                                            }),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          for (final start in [true, false])
+                                            ListTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              leading: const Icon(
+                                                Icons.calendar_today_outlined,
+                                              ),
+                                              title: Text(
+                                                start
+                                                    ? 'Bắt đầu dự kiến'
+                                                    : 'Hạn hoàn thành',
+                                              ),
+                                              subtitle: Text(
+                                                displayDate(
+                                                  (start ? _start : _due)
+                                                      ?.toUtc()
+                                                      .toIso8601String(),
+                                                ),
+                                              ),
+                                              onTap: () => _pickDate(start),
+                                              trailing:
+                                                  (start ? _start : _due) ==
+                                                      null
+                                                  ? const Icon(
+                                                      Icons.chevron_right,
+                                                    )
+                                                  : IconButton(
+                                                      tooltip: start
+                                                          ? 'Bỏ thời gian bắt đầu'
+                                                          : 'Bỏ hạn hoàn thành',
+                                                      onPressed: () =>
+                                                          setState(() {
+                                                            if (start) {
+                                                              _start = null;
+                                                            } else {
+                                                              _due = null;
+                                                            }
+                                                            _dirty = true;
+                                                          }),
+                                                      icon: const Icon(
+                                                        Icons.clear,
+                                                      ),
+                                                    ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                    if (_creating)
+                                      _section(
+                                        'Phạm vi ngành',
+                                        'Chọn ngành trong phạm vi đăng ký của đồ án.',
+                                        [
+                                          DropdownButtonFormField<int>(
+                                            key: ValueKey('major/$_primary'),
+                                            initialValue: _primary,
+                                            isExpanded: true,
+                                            itemHeight: null,
+                                            decoration: InputDecoration(
+                                              labelText: _interdisciplinary
+                                                  ? 'Ngành chính (bắt buộc)'
+                                                  : 'Ngành chính',
+                                            ),
+                                            items: [
+                                              const DropdownMenuItem(
+                                                value: null,
+                                                child: Text('Chưa phân loại'),
+                                              ),
+                                              for (final row in _majors)
+                                                DropdownMenuItem(
+                                                  value: idOf(row),
+                                                  child: Text(
+                                                    textOf(row, 'name'),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                            ],
+                                            onChanged: (v) => setState(() {
+                                              _primary = v;
+                                              _supporting.remove(v);
+                                              _dirty = true;
+                                            }),
+                                            validator: (v) =>
+                                                (_interdisciplinary ||
+                                                        _supporting
+                                                            .isNotEmpty) &&
+                                                    v == null
+                                                ? 'Chọn một ngành chính.'
+                                                : null,
+                                          ),
+                                          const SizedBox(height: 20),
+                                          const ContentSection(
+                                            'Ngành hỗ trợ',
+                                            null,
+                                          ),
+                                          for (final row in _majors)
+                                            if (idOf(row) != _primary)
+                                              CheckboxListTile(
+                                                contentPadding: EdgeInsets.zero,
+                                                controlAffinity:
+                                                    ListTileControlAffinity
+                                                        .leading,
+                                                title: Text(
+                                                  textOf(row, 'name'),
+                                                ),
+                                                value: _supporting.contains(
+                                                  idOf(row),
+                                                ),
+                                                onChanged: (v) => setState(() {
+                                                  if (v == true) {
+                                                    _supporting.add(idOf(row));
+                                                  } else {
+                                                    _supporting.remove(
+                                                      idOf(row),
+                                                    );
+                                                  }
+                                                  _dirty = true;
+                                                }),
+                                              ),
+                                        ],
+                                      ),
+                                    if (_creating || widget.assignmentOnly)
+                                      _section(
+                                        'Người phụ trách',
+                                        'Có thể chọn nhiều người hoặc để trống.',
+                                        [
+                                          if (widget.assignmentOnly)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 12,
+                                              ),
+                                              child: Text(
+                                                textOf(_task!, 'title'),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                            ),
+                                          if (_members.isEmpty)
+                                            const Text(
+                                              'Chưa có thành viên để phân công.',
+                                            ),
+                                          for (final row in _members)
+                                            CheckboxListTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              controlAffinity:
+                                                  ListTileControlAffinity
+                                                      .leading,
+                                              title: Text(
+                                                textOf(row, 'fullName'),
+                                              ),
+                                              value: _assignees.contains(
+                                                idOf(row, 'userId'),
+                                              ),
+                                              onChanged: (v) => setState(() {
+                                                if (v == true) {
+                                                  _assignees.add(
+                                                    idOf(row, 'userId'),
+                                                  );
+                                                } else {
+                                                  _assignees.remove(
+                                                    idOf(row, 'userId'),
+                                                  );
+                                                }
+                                                _dirty = true;
+                                              }),
+                                            ),
+                                        ],
                                       ),
                                   ],
-                                  onChanged: (v) => setState(() {
-                                    _milestone = v;
-                                    _dirty = true;
-                                  }),
-                                  validator: (v) =>
-                                      v == null ? 'Chọn mốc đồ án.' : null,
                                 ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  initialValue: _priority,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ưu tiên',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem(
-                                      value: null,
-                                      child: Text('Chưa chọn'),
-                                    ),
-                                    for (final v in [
-                                      'LOW',
-                                      'MEDIUM',
-                                      'HIGH',
-                                      'CRITICAL',
-                                    ])
-                                      DropdownMenuItem(
-                                        value: v,
-                                        child: Text(statusText(v)),
-                                      ),
-                                  ],
-                                  onChanged: (v) => setState(() {
-                                    _priority = v;
-                                    _dirty = true;
-                                  }),
-                                ),
-                                const SizedBox(height: 16),
-                                for (final start in [true, false])
-                                  ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(
-                                      start
-                                          ? 'Bắt đầu dự kiến'
-                                          : 'Hạn hoàn thành',
-                                    ),
-                                    subtitle: Text(
-                                      displayDate(
-                                        (start ? _start : _due)
-                                            ?.toUtc()
-                                            .toIso8601String(),
-                                      ),
-                                    ),
-                                    onTap: () => _pickDate(start),
-                                    trailing: IconButton(
-                                      tooltip: start
-                                          ? 'Bỏ thời gian bắt đầu'
-                                          : 'Bỏ hạn hoàn thành',
-                                      onPressed: () => setState(() {
-                                        if (start) {
-                                          _start = null;
-                                        } else {
-                                          _due = null;
-                                        }
-                                        _dirty = true;
-                                      }),
-                                      icon: const Icon(Icons.clear),
-                                    ),
-                                  ),
-                                const Text('Ngày giờ theo múi giờ thiết bị.'),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _description,
-                                  minLines: 3,
-                                  maxLines: 8,
-                                  maxLength: 10000,
-                                  onChanged: (_) =>
-                                      setState(() => _dirty = true),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Mô tả (không bắt buộc)',
-                                  ),
-                                  validator: (v) => (v?.length ?? 0) > 10000
-                                      ? 'Mô tả tối đa 10000 ký tự.'
-                                      : null,
-                                ),
-                              ],
-                              if (_creating) ...[
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<int>(
-                                  key: ValueKey('major/$_primary'),
-                                  initialValue: _primary,
-                                  isExpanded: true,
-                                  decoration: InputDecoration(
-                                    labelText: _interdisciplinary
-                                        ? 'Ngành chính (bắt buộc)'
-                                        : 'Ngành chính',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem(
-                                      value: null,
-                                      child: Text('Chưa phân loại'),
-                                    ),
-                                    for (final row in _majors)
-                                      DropdownMenuItem(
-                                        value: idOf(row),
-                                        child: Text(textOf(row, 'name')),
-                                      ),
-                                  ],
-                                  onChanged: (v) => setState(() {
-                                    _primary = v;
-                                    _supporting.remove(v);
-                                    _dirty = true;
-                                  }),
-                                  validator: (v) =>
-                                      (_interdisciplinary ||
-                                              _supporting.isNotEmpty) &&
-                                          v == null
-                                      ? 'Chọn một ngành chính.'
-                                      : null,
-                                ),
-                                const SizedBox(height: 16),
-                                const ContentSection('Ngành hỗ trợ', null),
-                                for (final row in _majors)
-                                  if (idOf(row) != _primary)
-                                    CheckboxListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(textOf(row, 'name')),
-                                      value: _supporting.contains(idOf(row)),
-                                      onChanged: (v) => setState(() {
-                                        if (v == true) {
-                                          _supporting.add(idOf(row));
-                                        } else {
-                                          _supporting.remove(idOf(row));
-                                        }
-                                        _dirty = true;
-                                      }),
-                                    ),
-                              ],
-                              if (_creating || widget.assignmentOnly) ...[
-                                const SizedBox(height: 16),
-                                const ContentSection(
-                                  'Người phụ trách',
-                                  'Có thể chọn nhiều người hoặc để trống.',
-                                ),
-                                for (final row in _members)
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(textOf(row, 'fullName')),
-                                    value: _assignees.contains(
-                                      idOf(row, 'userId'),
-                                    ),
-                                    onChanged: (v) => setState(() {
-                                      if (v == true) {
-                                        _assignees.add(idOf(row, 'userId'));
-                                      } else {
-                                        _assignees.remove(idOf(row, 'userId'));
-                                      }
-                                      _dirty = true;
-                                    }),
-                                  ),
-                              ],
-                            ],
-                          ),
-                        ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                      if (_uncertainCreate)
-                        OutlinedButton(
-                          onPressed: _saving
-                              ? null
-                              : () {
-                                  setState(() => _dirty = false);
-                                  Navigator.pop(context);
-                                },
-                          child: const Text('Quay về danh sách để kiểm tra'),
-                        )
-                      else if (_needsReload)
-                        FilledButton(
-                          onPressed: _loading || _saving ? null : _load,
-                          child: const Text('Tải dữ liệu mới'),
-                        )
-                      else
-                        FilledButton(
-                          onPressed: _loading || _saving || !_allowed
-                              ? null
-                              : _save,
-                          child: Text(
-                            _saving
-                                ? 'Đang lưu…'
-                                : widget.assignmentOnly
-                                ? 'Lưu phân công'
-                                : _creating
-                                ? 'Tạo công việc'
-                                : 'Lưu nội dung',
-                          ),
-                        ),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
-              ),
+                if (_initialized)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: _saveAction(),
+                  ),
+              ],
             ),
           ),
         ),
