@@ -4,6 +4,8 @@
 
 ## Tiến độ ngày 16/11/2026
 
+Cập nhật **17/11 — 0.5.0**: redesign UX toàn app với các agent phụ trách riêng AI/chat, task/video và QA độc lập. Giảm cụm nút, thống nhất điều hướng/typography, thêm rail cuộn ngang và vuốt tab, form lưu cố định; đã sửa các lỗi keyboard, stale data/reply và focus. Xem [báo cáo UX](MOBILE_UX_REVIEW.md). Chưa mở thêm nghiệp vụ hoặc thay provider BE trong lượt này.
+
 Bản **0.4.0** bổ sung tạo/sửa/phân công task, xem việc toàn đồ án và dùng gợi ý AI để điền form. Trợ lý có chế độ PROGRESS theo dữ liệu BE để xem tiến độ/deadline ngay cả khi mô hình hỏi tự do chưa sẵn sàng. Chưa thay cấu hình provider AI trên BE.
 
 Theo ưu tiên mới của người dùng, **đồng bộ tính năng trước**; không chặn chat/call/AI để chờ nghiệm thu thiết bị đầy đủ. Bản 0.3.0 đưa chat, phòng họp tích hợp, trợ lý AI và kết quả công bố vào mobile; xem [phạm vi triển khai](MOBILE_COLLABORATION.md). Format/analyze/test/build vẫn là kiểm tra ngắn bắt buộc trước merge.

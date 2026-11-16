@@ -14,6 +14,7 @@ class PagedRecords extends StatefulWidget {
     required this.emptyText,
     this.revision = 0,
     this.leading = const [],
+    this.showHeading = true,
   });
   final AuthController auth;
   final String path;
@@ -22,6 +23,7 @@ class PagedRecords extends StatefulWidget {
   final Widget Function(BuildContext, Json, Future<void> Function()) item;
   final int revision;
   final List<Widget> leading;
+  final bool showHeading;
   @override
   State<PagedRecords> createState() => _PagedRecordsState();
 }
@@ -38,6 +40,7 @@ class _PagedRecordsState extends State<PagedRecords> {
   Widget build(BuildContext context) => RemotePage<PageData>(
     key: ValueKey('${widget.path}/$_page'),
     title: widget.title,
+    showHeading: widget.showHeading,
     revision: widget.revision,
     load: () async {
       final separator = widget.path.contains('?') ? '&' : '?';

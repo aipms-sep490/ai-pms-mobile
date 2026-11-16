@@ -11,11 +11,13 @@ class DashboardScreen extends StatefulWidget {
     required this.auth,
     this.onOpenProject,
     this.onOpenDeadline,
+    this.showHeading = true,
   });
 
   final AuthController auth;
   final VoidCallback? onOpenProject;
   final ValueChanged<DashboardDeadline>? onOpenDeadline;
+  final bool showHeading;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -79,6 +81,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? error.message
             : 'Không thể tải tổng quan. Vui lòng thử lại.';
         _loading = false;
+        if (error is ApiException &&
+            [401, 403, 404].contains(error.statusCode)) {
+          _data = null;
+        }
       });
     }
   }
@@ -109,13 +115,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        'Tổng quan',
-                        style: Theme.of(context).textTheme.headlineMedium,
+                    if (widget.showHeading)
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          'Tổng quan',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 4),
                     Text(
                       'Xin chào, ${widget.auth.user?.fullName ?? ''}',
@@ -313,6 +320,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               header: true,
               child: Text(
                 project.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 20,
                   height: 1.35,
@@ -349,17 +358,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            if (dashboard.teamName != null) ...[
-              const SizedBox(height: 16),
-              _InfoLine(icon: Icons.people_outline, text: dashboard.teamName!),
-            ],
-            if (project.supervisorName != null) ...[
-              const SizedBox(height: 8),
-              _InfoLine(
-                icon: Icons.person_outline,
-                text: 'GVHD: ${project.supervisorName}',
-              ),
-            ],
             const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -590,22 +588,6 @@ class _Metric extends StatelessWidget {
             ),
     );
   }
-}
-
-class _InfoLine extends StatelessWidget {
-  const _InfoLine({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, size: 18, color: AppColors.textMuted),
-      const SizedBox(width: 8),
-      Expanded(child: Text(text, style: _caption)),
-    ],
-  );
 }
 
 class _DeadlineRow extends StatelessWidget {

@@ -69,92 +69,144 @@ class _WorkspaceState extends State<_Workspace> {
   int _selected = 0;
   int _revision = 0;
   final _visited = <int>{0};
+  final _pages = PageController();
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
 
   void _changed() {
     if (mounted) setState(() => _revision++);
   }
 
-  void _select(int index) => setState(() {
-    _visited.add(index);
-    _selected = index;
-  });
+  void _select(int index) {
+    FocusScope.of(context).unfocus();
+    final animate =
+        (_selected - index).abs() == 1 &&
+        !MediaQuery.disableAnimationsOf(context);
+    setState(() {
+      _visited.add(index);
+      _selected = index;
+    });
+    if (!_pages.hasClients) return;
+    if (animate) {
+      _pages.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _pages.jumpToPage(index);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final student = widget.auth.user?.roles.contains('STUDENT') ?? false;
+    final titles = student
+        ? const ['Tổng quan', 'Đồ án', 'Công việc', 'Hộp thư', 'Tài khoản']
+        : const ['Tổng quan', 'Tài khoản'];
     return Scaffold(
-      appBar: student
-          ? AppBar(
-              title: const Text('AI-PMS'),
-              actions: [
-                IconButton(
-                  tooltip: 'Trò chuyện',
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ChatInboxScreen(auth: widget.auth),
-                    ),
-                  ),
+      appBar: AppBar(
+        title: Text(
+          titles[_selected],
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          if (student) ...[
+            IconButton(
+              tooltip: 'Trò chuyện',
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => ChatInboxScreen(auth: widget.auth),
                 ),
-                IconButton(
-                  tooltip: 'Trợ lý AI',
-                  icon: const Icon(Icons.auto_awesome_outlined),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => AiHomeScreen(auth: widget.auth),
-                    ),
-                  ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Trợ lý AI',
+              icon: const Icon(Icons.auto_awesome_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => AiHomeScreen(auth: widget.auth),
                 ),
-              ],
-            )
-          : null,
+              ),
+            ),
+          ],
+        ],
+      ),
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(
-          index: _selected,
+        child: PageView(
+          key: const Key('workspace-pages'),
+          controller: _pages,
+          physics: MediaQuery.viewInsetsOf(context).bottom > 0
+              ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
+          onPageChanged: (index) => setState(() {
+            _selected = index;
+            _visited.add(index);
+          }),
           children: [
-            DashboardScreen(
-              key: ValueKey('dashboard/$_revision'),
-              auth: widget.auth,
-              onOpenProject: student ? () => _select(1) : null,
-              onOpenDeadline: student
-                  ? (deadline) => openEntity(
-                      context,
-                      widget.auth,
-                      EntityTarget(
-                        deadline.isMilestone ? 'MILESTONE' : 'TASK',
-                        deadline.id,
-                      ),
-                      _changed,
-                    )
-                  : null,
+            _RetainedPage(
+              child: DashboardScreen(
+                key: ValueKey('dashboard/$_revision'),
+                auth: widget.auth,
+                showHeading: false,
+                onOpenProject: student ? () => _select(1) : null,
+                onOpenDeadline: student
+                    ? (deadline) => openEntity(
+                        context,
+                        widget.auth,
+                        EntityTarget(
+                          deadline.isMilestone ? 'MILESTONE' : 'TASK',
+                          deadline.id,
+                        ),
+                        _changed,
+                      )
+                    : null,
+              ),
             ),
             if (student) ...[
-              _visited.contains(1)
-                  ? ProjectScreen(
-                      auth: widget.auth,
-                      onChanged: _changed,
-                      revision: _revision,
-                    )
-                  : const SizedBox.shrink(),
-              _visited.contains(2)
-                  ? TasksScreen(
-                      auth: widget.auth,
-                      onChanged: _changed,
-                      revision: _revision,
-                    )
-                  : const SizedBox.shrink(),
-              _visited.contains(3)
-                  ? InboxScreen(
-                      auth: widget.auth,
-                      onChanged: _changed,
-                      revision: _revision,
-                    )
-                  : const SizedBox.shrink(),
+              _RetainedPage(
+                child: _visited.contains(1)
+                    ? ProjectScreen(
+                        auth: widget.auth,
+                        onChanged: _changed,
+                        revision: _revision,
+                        showHeading: false,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              _RetainedPage(
+                child: _visited.contains(2)
+                    ? TasksScreen(
+                        auth: widget.auth,
+                        onChanged: _changed,
+                        revision: _revision,
+                        showHeading: false,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              _RetainedPage(
+                child: _visited.contains(3)
+                    ? InboxScreen(
+                        auth: widget.auth,
+                        onChanged: _changed,
+                        revision: _revision,
+                        showHeading: false,
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ],
-            ProfileScreen(auth: widget.auth),
+            _RetainedPage(
+              child: ProfileScreen(auth: widget.auth, showHeading: false),
+            ),
           ],
         ),
       ),
@@ -193,5 +245,23 @@ class _WorkspaceState extends State<_Workspace> {
         ),
       ),
     );
+  }
+}
+
+class _RetainedPage extends StatefulWidget {
+  const _RetainedPage({required this.child});
+  final Widget child;
+  @override
+  State<_RetainedPage> createState() => _RetainedPageState();
+}
+
+class _RetainedPageState extends State<_RetainedPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

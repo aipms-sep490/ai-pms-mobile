@@ -316,7 +316,9 @@ void main() {
         return json({}, 404);
       });
       await _open(tester, AssistantChatScreen(auth: auth, projectId: 1));
-      await _tap(tester, find.text('Tiến độ & deadline'));
+      await _tap(tester, find.byTooltip('Tùy chọn'));
+      await _tap(tester, find.text('Tiến độ'));
+      await _tap(tester, find.text('Áp dụng'));
       await _tap(tester, find.byTooltip('Xem tiến độ'));
       expect(asks, 1);
       expect(find.text('Có một công việc quá hạn.'), findsOneWidget);

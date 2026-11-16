@@ -4,9 +4,10 @@ import '../../ui/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.auth});
+  const ProfileScreen({super.key, required this.auth, this.showHeading = true});
 
   final AuthController auth;
+  final bool showHeading;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -49,11 +50,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            Semantics(
-              header: true,
-              child: Text('Tài khoản', style: textTheme.headlineMedium),
-            ),
-            const SizedBox(height: 24),
+            if (widget.showHeading)
+              Semantics(
+                header: true,
+                child: Text('Tài khoản', style: textTheme.headlineMedium),
+              ),
+            const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -130,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
-              'AI-PMS · Phiên bản 0.4.0',
+              'AI-PMS · Phiên bản 0.5.0',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textMuted),
             ),

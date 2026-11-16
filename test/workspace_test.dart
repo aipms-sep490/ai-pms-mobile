@@ -371,6 +371,8 @@ void main() {
         semantics.dispose();
       }
       await tap(tester, find.text('Họp tuần').first);
+      await tap(tester, find.text('Phản hồi tham gia'));
+      expect(writes, 0);
       await tap(tester, find.text('Tham gia'));
       expect(writes, 1);
       expect(find.text('Đã cập nhật phản hồi tham gia.'), findsOneWidget);

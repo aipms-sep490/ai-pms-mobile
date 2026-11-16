@@ -54,6 +54,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(375, 812));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       var dashboardCalls = 0;
+      var dashboardForbidden = false;
       final refreshResponse = Completer<http.Response>();
       final api = ApiClient(
         origin: 'https://api.example.test',
@@ -79,6 +80,9 @@ void main() {
             case '/api/v1/dashboards/student':
               dashboardCalls++;
               if (dashboardCalls == 4) return refreshResponse.future;
+              if (dashboardCalls == 5 && dashboardForbidden) {
+                return json({}, 403);
+              }
               return dashboardCalls == 1 || dashboardCalls == 3
                   ? json({}, 503)
                   : json(dashboard());
@@ -131,6 +135,23 @@ void main() {
       expect(find.text('62%'), findsOneWidget);
       refreshResponse.complete(json(dashboard()));
       await tester.pumpAndSettle();
+      dashboardForbidden = true;
+      await tester.tap(refresh);
+      await tester.pumpAndSettle();
+      expect(dashboardCalls, 5);
+      expect(find.text('62%'), findsNothing);
+      expect(
+        find.text('Tài khoản không được phép thực hiện thao tác này.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Bạn đang xem dữ liệu từ lần tải thành công gần nhất.'),
+        findsNothing,
+      );
+      dashboardForbidden = false;
+      await tester.tap(find.text('Thử lại'));
+      await tester.pumpAndSettle();
+      expect(find.text('62%'), findsOneWidget);
       await tester.binding.setSurfaceSize(const Size(320, 667));
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -138,7 +159,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Hoàn thiện tài liệu thiết kế'),
         200,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

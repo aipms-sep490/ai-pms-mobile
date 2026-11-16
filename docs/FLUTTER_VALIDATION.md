@@ -102,3 +102,11 @@ Baseline `0018acf`, nhánh `feat/mobile-task-authoring`; contract BE `9eedf9a`, 
 - POST assistant với `toolMode=PROGRESS` trả 200, `generationStatus=COMPLETED`, `answerType=GROUNDED` và evidence thật. Đây là công cụ dữ liệu hệ thống, không phải bằng chứng mô hình hỏi tự do đã phục hồi; chưa đổi cấu hình provider BE.
 
 Web release staging và APK được kiểm tra tại CI của PR trước merge. Kết quả native/runtime/iOS còn theo dõi riêng; không gửi tin nhắn cho người khác để kiểm tra task.
+
+## Redesign UX 0.5.0 — 17/11/2026
+
+Baseline `7fd7b11`, nhánh `feat/mobile-ux-redesign`. Các agent phân công riêng và review chéo; phạm vi/evidence tại [MOBILE_UX_REVIEW.md](MOBILE_UX_REVIEW.md), hướng thiết kế tại [MOBILE_UX_DESIGN.md](MOBILE_UX_DESIGN.md).
+
+- Format/analyze đạt; full suite35 tests đạt. Giữ hồi quy auth/API/concurrency/permissions; bổ sung rail48dp ở320dp/200%, bàn phím, swipe/tap và giữ trạng thái tab, unfocus khi đổi tab, reduced motion, AI landscape với keyboard, dashboard403/retry và RSVP chỉ gửi sau lựa chọn.
+- Chrome DevTools đọc trực tiếp giao diện375×812,320×667; dùng API fixture riêng để xem task quản lý, AI/chat, form và các trạng thái lỗi/rỗng/mất quyền. Không đưa fixture hoặc credential vào code/runtime staging. Chạy thử giao diện không thay bằng chứng DB/media/native.
+- Build web release và Wasm dry run được chạy bằng SDK chốt; final web/APK được CI kiểm tra trước merge. Không thêm package/native permission. iOS và nghiệm thu vật lý vẫn chưa xác minh.
