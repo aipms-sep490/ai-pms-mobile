@@ -122,6 +122,13 @@ void main() {
         return json({}, 404);
       });
       await tap(tester, find.text('Công việc').last);
+      final searchSemantics = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        expect(find.bySemanticsLabel('Tìm công việc'), findsOneWidget);
+      } finally {
+        searchSemantics.dispose();
+      }
       await tap(tester, find.text('Công việc thử nghiệm').last);
       await tap(tester, find.text('Đổi trạng thái'));
       await tap(tester, find.text('Đang thực hiện').last);

@@ -132,9 +132,13 @@ class _RemotePageState<T> extends State<RemotePage<T>> {
                 excluding: _loading,
                 child: AbsorbPointer(
                   absorbing: _loading,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: widget.content(context, _data as T, _load),
+                  child: Semantics(
+                    container: true,
+                    explicitChildNodes: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: widget.content(context, _data as T, _load),
+                    ),
                   ),
                 ),
               )
