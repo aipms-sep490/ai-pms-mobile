@@ -84,5 +84,7 @@ Nhánh `feat/mobile-chat-call-ai`, baseline `797c022`; đối chiếu BE develop
 - Web release staging build đạt, Wasm dry run đạt. Android debug APK phải qua job CI trước merge; iOS và runtime camera/mic trên thiết bị chưa xác minh.
 - API staging thật: login/dashboard 200; chat conversations 200 (rỗng), recipients 200, upload policy 200; lịch sử assistant và AI run 200 (rỗng); digest/rủi ro và workflow NEXT_STEPS 200. Kết quả chưa công bố trả 404.
 - Tài khoản thử hiện chỉ có lịch họp COMPLETED. Chưa gọi join/start/end phòng thật, chưa gửi tin nhắn cho người khác và chưa dùng các kết quả đọc làm bằng chứng cho media hai máy hoặc ghi DB của tính năng mới.
+- Chrome DevTools 375×667: login → danh sách chat/người nhận → AI digest → hỏi AI. POST tạo hội thoại/ask và GET đọc lại hội thoại đều 200; hội thoại đã lưu trên BE. Mô hình trả FALLBACK/tạm không khả dụng, app hiển thị đúng nội dung và giới hạn BE trả về; không khẳng định chất lượng sinh nội dung AI. Console không có warning/error trong các luồng đã xem.
+- Sửa ánh xạ evidence dùng ID có tiền tố TASK-/MS-/PR-/MTG- đúng contract BE để mở màn có kiểm tra quyền; nguồn không được hỗ trợ giữ dạng tham chiếu đọc.
 
 Không có Android SDK/emulator tại máy Windows này; iOS cần macOS/Xcode. External push, SignalR và screenshare/recording chưa được triển khai. Phạm vi và các endpoint ở [MOBILE_COLLABORATION.md](MOBILE_COLLABORATION.md).

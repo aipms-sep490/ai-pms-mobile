@@ -1,5 +1,6 @@
 import 'package:ai_pms_mobile/core/api_client.dart';
 import 'package:ai_pms_mobile/features/chat/chat_controller.dart';
+import 'package:ai_pms_mobile/features/ai/ai_screen.dart';
 import 'package:ai_pms_mobile/features/meetings/video_meeting_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +35,22 @@ void main() {
       expect(
         () => ChatPage({'items': [], 'hasMore': true}),
         throwsFormatException,
+      );
+      expect(
+        aiEvidenceTarget({'sourceType': 'TASK', 'sourceId': 'TASK-42'})?.id,
+        42,
+      );
+      expect(
+        aiEvidenceTarget({'sourceType': 'MEETING', 'sourceId': 'MTG-7'})?.type,
+        'MEETING',
+      );
+      expect(
+        aiEvidenceTarget({'sourceType': 'TASK', 'sourceId': 'MTG-7'}),
+        isNull,
+      );
+      expect(
+        aiEvidenceTarget({'sourceType': 'TASK', 'sourceId': '../42'}),
+        isNull,
       );
     },
   );

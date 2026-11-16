@@ -12,6 +12,24 @@ import '../workspace/workspace_models.dart';
 
 const _aiTimeout = Duration(seconds: 90);
 
+EntityTarget? aiEvidenceTarget(Json source) {
+  final type = textOf(source, 'sourceType', '').toUpperCase();
+  final prefix = switch (type) {
+    'TASK' => 'TASK-',
+    'MILESTONE' => 'MS-',
+    'MEETING' => 'MTG-',
+    'PROGRESS_REPORT' => 'PR-',
+    _ => null,
+  };
+  if (prefix == null) return null;
+  var raw = textOf(source, 'sourceId', '');
+  if (raw.startsWith(prefix)) raw = raw.substring(prefix.length);
+  if (!RegExp(r'^[1-9][0-9]*$').hasMatch(raw)) return null;
+  final id = int.tryParse(raw);
+  if (id == null || '$id' != raw) return null;
+  return EntityTarget(type, id);
+}
+
 class AiHomeScreen extends StatelessWidget {
   const AiHomeScreen({super.key, required this.auth, this.projectId});
   final AuthController auth;
@@ -226,7 +244,9 @@ List<Widget> aiContent(BuildContext context, AuthController auth, Json data) {
             'title',
             textOf(item, 'description', textOf(item, 'code', 'Dấu hiệu')),
           ),
-          textOf(item, 'detail', textOf(item, 'explanation', '')),
+          item['detail'] is String
+              ? item['detail'] as String
+              : item['explanation'] as String?,
         ),
       );
     }
@@ -285,19 +305,7 @@ List<Widget> aiContent(BuildContext context, AuthController auth, Json data) {
     widgets.add(const ContentSection('Nguồn tham chiếu', null));
   }
   for (final source in evidence) {
-    final type = switch (source['sourceType']) {
-      'REPORT' => 'PROGRESS_REPORT',
-      final String s => s.toUpperCase(),
-      _ => '',
-    };
-    final raw = textOf(source, 'sourceId', '');
-    final id = int.tryParse(raw);
-    final target = id == null || '$id' != raw
-        ? null
-        : EntityTarget.fromNotification({
-            'relatedEntityType': type,
-            'relatedEntityId': id,
-          });
+    final target = aiEvidenceTarget(source);
     widgets.add(
       RecordTile(
         title: textOf(source, 'title'),
