@@ -40,13 +40,13 @@ jobs:
       - name: Run unit and widget tests
         run: flutter test
       - name: Build web preview
-        run: flutter build web --release --dart-define=API_BASE_URL=http://localhost:5080
+        run: flutter build web --release --dart-define-from-file=config/staging.json
       - name: Build Android debug APK
-        run: flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:5080
+        run: flutter build apk --debug --dart-define-from-file=config/staging.json
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: android-debug-apk
+          name: android-staging-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 7

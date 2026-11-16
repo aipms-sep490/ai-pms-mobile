@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:ai_pms_mobile/app.dart';
 import 'package:ai_pms_mobile/core/api_client.dart';
@@ -10,51 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 
-const user = {
-  'id': 17,
-  'email': 'mobile-smoke@example.test',
-  'fullName': 'Sinh viên kiểm thử',
-  'roles': ['STUDENT'],
-};
-
-Map<String, Object?> dashboard() => {
-  'asOfUtc': DateTime.now().toUtc().toIso8601String(),
-  'context': {
-    'selectedSemester': {'name': 'Học kỳ FA26'},
-    'currentTeam': {'name': 'Nhóm SE28', 'isLeader': true},
-  },
-  'project': {
-    'id': 1,
-    'code': 'SE28',
-    'title': 'Hệ thống quản lý tiến trình đồ án',
-    'status': 'ACTIVE',
-    'supervisor': {'name': 'Giảng viên hướng dẫn'},
-    'analysis': {
-      'dataStatus': 'SUFFICIENT',
-      'riskLevel': 'LOW',
-      'progressSummary': {'progressPercentage': 62},
-    },
-  },
-  'unreadNotifications': 3,
-  'assignedOpenTasks': 5,
-  'assignedOverdueTasks': 1,
-  'taskDeadlines': [
-    {
-      'id': 12,
-      'title': 'Hoàn thiện tài liệu thiết kế',
-      'status': 'IN_PROGRESS',
-      'dueAtUtc': '2026-11-15T10:00:00Z',
-      'isOverdue': false,
-    },
-  ],
-  'milestoneDeadlines': [],
-};
-
-http.Response json(Object value, [int status = 200]) => http.Response(
-  jsonEncode(value),
-  status,
-  headers: {'content-type': 'application/json; charset=utf-8'},
-);
+import 'support/mobile_fixtures.dart';
 
 void main() {
   testWidgets(

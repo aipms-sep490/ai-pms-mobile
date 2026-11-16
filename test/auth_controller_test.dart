@@ -70,6 +70,85 @@ AuthController _auth(
 
 void main() {
   test(
+    'authorized writes refresh once, preserve body and never replay conflicts',
+    () async {
+      var writes = 0;
+      var rotations = 0;
+      final auth = _auth(_Store(), (request) async {
+        if (request.url.path.endsWith('/login')) return _json(_login());
+        if (request.url.path.endsWith('/me')) return _json(_user);
+        if (request.url.path.endsWith('/refresh')) {
+          rotations++;
+          return _json(_login('new'));
+        }
+        if (request.url.path.endsWith('/status')) {
+          writes++;
+          expect(request.method, 'PUT');
+          expect(jsonDecode(request.body), {
+            'newStatus': 'BLOCKED',
+            'reason': 'Waiting',
+            'concurrencyToken': 'v1',
+          });
+          return _json({}, writes == 1 ? 401 : 409);
+        }
+        return http.Response('', 204);
+      });
+      addTearDown(auth.dispose);
+      await auth.signIn('student@example.test', 'fixture');
+      await expectLater(
+        auth.request(
+          '/api/v1/tasks/12/status',
+          method: 'PUT',
+          body: {
+            'newStatus': 'BLOCKED',
+            'reason': 'Waiting',
+            'concurrencyToken': 'v1',
+          },
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.statusCode,
+            'status',
+            409,
+          ),
+        ),
+      );
+      expect(writes, 2);
+      expect(rotations, 1);
+    },
+  );
+
+  test(
+    'a response arriving after logout cannot be delivered to the old session',
+    () async {
+      final pending = Completer<http.Response>();
+      final started = Completer<void>();
+      final auth = _auth(_Store(), (request) async {
+        if (request.url.path.endsWith('/login')) return _json(_login());
+        if (request.url.path.endsWith('/me')) return _json(_user);
+        if (request.url.path.endsWith('/status')) {
+          started.complete();
+          return pending.future;
+        }
+        return http.Response('', 204);
+      });
+      addTearDown(auth.dispose);
+      await auth.signIn('student@example.test', 'fixture');
+      final write = auth.request(
+        '/api/v1/tasks/12/status',
+        method: 'PUT',
+        body: {'newStatus': 'IN_PROGRESS'},
+      );
+      final rejected = expectLater(write, throwsA(isA<ApiException>()));
+      await started.future;
+      await auth.signOut();
+      pending.complete(_json({'status': 'IN_PROGRESS'}));
+      await rejected;
+      expect(auth.status, SessionStatus.anonymous);
+    },
+  );
+
+  test(
     'API rejects invalid origins, foreign hosts and path traversal',
     () async {
       var requests = 0;

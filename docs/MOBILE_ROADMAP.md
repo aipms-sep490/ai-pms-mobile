@@ -2,6 +2,12 @@
 
 Định hướng: **theo dõi tiến độ + thao tác nhanh**, ưu tiên Student/Team Leader. Web đảm nhiệm lập kế hoạch phức tạp, soạn hồ sơ dài, quản trị học vụ, chấm điểm và công bố. Mobile và web dùng chung backend/database.
 
+## Tiến độ ngày 16/11/2026
+
+MOB-04 đến MOB-08 đã có phần triển khai MVP sinh viên trong 0.2.0: project/milestone/thành viên, việc của tôi và trạng thái theo capability, lời mời, inbox, lịch/RSVP, đọc báo cáo/phản hồi. Xem [contract và giới hạn](MOBILE_MVP.md). Dashboard và các màn dùng chung backend staging; không dùng dữ liệu giả khi chạy app.
+
+MOB-03A đã kiểm tra luồng web với staging; nghiệm thu native secure storage/restart và mutation trên bộ dữ liệu thử riêng còn cần thiết. MOB-09 còn nghiệm thu thiết bị Android/iOS, external deep link/OS lifecycle và bản phát hành ký. CI đóng gói debug APK trỏ staging để hỗ trợ bước này. Không đánh dấu toàn bộ sản phẩm đạt production chỉ từ test/build.
+
 ## MOB-03 — Nền tảng Flutter
 
 Nền tảng chuyển sang **Flutter/Dart** theo lựa chọn của người dùng: cấu hình API origin qua `API_BASE_URL`, auth/session, hai tab Tổng quan/Tài khoản, dashboard theo contract backend, setup và CI. Xem [quyết định chuyển đổi](FLUTTER_MIGRATION.md) và [validation Flutter](FLUTTER_VALIDATION.md).

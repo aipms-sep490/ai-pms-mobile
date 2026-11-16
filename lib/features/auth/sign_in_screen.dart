@@ -78,11 +78,13 @@ class _SignInScreenState extends State<SignInScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        'AI-PMS',
-                        style: textTheme.titleLarge?.copyWith(
-                          color: AppColors.navy,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'AI-PMS',
+                          style: textTheme.titleLarge?.copyWith(
+                            color: AppColors.navy,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
