@@ -9,6 +9,7 @@ import '../auth/auth_controller.dart';
 import '../dashboard/dashboard_model.dart';
 import '../workspace/inbox_screen.dart';
 import '../workspace/workspace_models.dart';
+import '../workspace/task_editor_screen.dart';
 
 const _aiTimeout = Duration(seconds: 90);
 
@@ -165,7 +166,14 @@ class AiDocumentScreen extends StatelessWidget {
   );
 }
 
-List<Widget> aiContent(BuildContext context, AuthController auth, Json data) {
+List<Widget> aiContent(
+  BuildContext context,
+  AuthController auth,
+  Json data, {
+  int? projectId,
+}) {
+  final draftProjectId =
+      projectId ?? (data['projectId'] is int ? data['projectId'] as int : null);
   if (data['errorCode'] == 'AI_HISTORY_SCOPE_CHANGED') {
     return const [
       Notice(
@@ -174,13 +182,28 @@ List<Widget> aiContent(BuildContext context, AuthController auth, Json data) {
     ];
   }
   if (data['answer'] is Json) {
-    return aiContent(context, auth, data['answer'] as Json);
+    return aiContent(
+      context,
+      auth,
+      data['answer'] as Json,
+      projectId: draftProjectId,
+    );
   }
   if (data['reportSummary'] is Json) {
-    return aiContent(context, auth, data['reportSummary'] as Json);
+    return aiContent(
+      context,
+      auth,
+      data['reportSummary'] as Json,
+      projectId: draftProjectId,
+    );
   }
   if (data['progressAnalysis'] is Json) {
-    return aiContent(context, auth, data['progressAnalysis'] as Json);
+    return aiContent(
+      context,
+      auth,
+      data['progressAnalysis'] as Json,
+      projectId: draftProjectId,
+    );
   }
   final widgets = <Widget>[];
   if (data['generationStatus'] == 'FAILED') {
@@ -299,6 +322,26 @@ List<Widget> aiContent(BuildContext context, AuthController auth, Json data) {
         onPressed: () => Clipboard.setData(ClipboardData(text: text)),
       ),
     );
+    if (draft['kind'] == 'TASK' &&
+        draftProjectId != null &&
+        draftProjectId > 0) {
+      widgets.add(
+        OutlinedButton.icon(
+          icon: const Icon(Icons.add_task),
+          label: const Text('Kiểm tra & tạo công việc'),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute<Json>(
+              builder: (_) => TaskEditorScreen(
+                auth: auth,
+                projectId: draftProjectId,
+                initialDraft: draft,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
   }
   final evidence = recordsOf(data['evidence'] ?? data['projectEvidence'] ?? []);
   if (evidence.isNotEmpty) {
@@ -471,6 +514,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   ApiUpload? _file;
   Json? _unsyncedResponse;
   String? _unsyncedQuery;
+  String _mode = 'CHAT';
   @override
   void initState() {
     super.initState();
@@ -525,7 +569,9 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   }
 
   Future<void> _ask() async {
-    final query = _query.text.trim();
+    final query = _query.text.trim().isEmpty && _mode == 'PROGRESS'
+        ? 'Tóm tắt tiến độ, công việc quá hạn và các mốc cần theo dõi.'
+        : _query.text.trim();
     if (_busy || _loading || query.isEmpty) return;
     if (query.length < 2 || query.length > 2000) {
       setState(() => _error = 'Câu hỏi cần từ 2 đến 2000 ký tự.');
@@ -555,6 +601,8 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         'conversationId': _id,
         'expectedRevision': _revision,
         'pageContext': 'Mobile',
+        if (_mode == 'PROGRESS') 'toolMode': 'PROGRESS',
+        if (_mode == 'TASK') 'draftKind': 'TASK',
       };
       final response = objectOf(
         await widget.auth.request(
@@ -642,7 +690,10 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                     selected: _scope == e.key,
                     onSelected: _busy
                         ? null
-                        : (_) => setState(() => _scope = e.key),
+                        : (_) => setState(() {
+                            _scope = e.key;
+                            if (_scope == 'ACADEMIC') _mode = 'CHAT';
+                          }),
                   ),
               ],
             ),
@@ -675,13 +726,19 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                     context,
                     widget.auth,
                     objectOf(turn['response']),
+                    projectId: widget.projectId,
                   ),
                   const Divider(height: 32),
                 ],
                 if (_unsyncedResponse != null) ...[
                   Surface(child: SelectableBody(_unsyncedQuery!)),
                   const SizedBox(height: 16),
-                  ...aiContent(context, widget.auth, _unsyncedResponse!),
+                  ...aiContent(
+                    context,
+                    widget.auth,
+                    _unsyncedResponse!,
+                    projectId: widget.projectId,
+                  ),
                 ],
               ],
             ),
@@ -691,6 +748,46 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
               label: Text(_file!.name),
               onDeleted: _busy ? null : () => setState(() => _file = null),
             ),
+          if (widget.projectId != null &&
+              (_scope != 'ACADEMIC' || _id == null) &&
+              MediaQuery.viewInsetsOf(context).bottom == 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final entry in const {
+                    'CHAT': 'Hỏi tự do',
+                    'PROGRESS': 'Tiến độ & deadline',
+                    'TASK': 'Nháp công việc',
+                  }.entries)
+                    ChoiceChip(
+                      label: Text(entry.value),
+                      selected: _mode == entry.key,
+                      onSelected: _busy || _loading
+                          ? null
+                          : (_) => setState(() {
+                              _mode = entry.key;
+                              if (_mode != 'CHAT' &&
+                                  _scope == 'ACADEMIC' &&
+                                  _id == null) {
+                                _scope = 'COMBINED';
+                              }
+                              if (_mode == 'PROGRESS') _file = null;
+                            }),
+                    ),
+                ],
+              ),
+            ),
+          if (_mode == 'PROGRESS' &&
+              MediaQuery.viewInsetsOf(context).bottom == 0)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Dùng dữ liệu tiến độ từ hệ thống. Không cần đính kèm tệp.',
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -698,7 +795,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
               children: [
                 IconButton(
                   tooltip: 'Đính kèm tài liệu cho AI',
-                  onPressed: _busy ? null : _attach,
+                  onPressed: _busy || _mode == 'PROGRESS' ? null : _attach,
                   icon: const Icon(Icons.attach_file),
                 ),
                 Expanded(
@@ -715,7 +812,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Gửi câu hỏi',
+                  tooltip: _mode == 'PROGRESS' ? 'Xem tiến độ' : 'Gửi câu hỏi',
                   onPressed: _busy || _loading ? null : _ask,
                   icon: const Icon(Icons.send),
                 ),

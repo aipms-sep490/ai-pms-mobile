@@ -26,4 +26,6 @@ Baseline mobile `797c022`; contract BE develop `9eedf9a`; API staging qua `confi
 
 ## Phạm vi còn lại
 
-External push, SignalR foreground thay polling, AI streaming, nhiều tệp trong một lượt AI, áp dụng bản gợi ý thành thao tác, screenshare/recording và feature parity của các form dài trên web chưa nằm trong bản này. Xem validation để phân biệt phần đã build với luồng đã chạy thật.
+Từ 0.4.0, gợi ý TASK có thể mở form tạo công việc để đối chiếu mốc/ngành/người phụ trách và lưu theo quyền. Hội thoại có công cụ PROGRESS (dữ liệu tiến độ BE) và TASK (yêu cầu bản nháp); không tự lưu mutation từ AI.
+
+External push, SignalR foreground thay polling, AI streaming, nhiều tệp trong một lượt AI, áp dụng gợi ý report/meeting, screenshare/recording và feature parity của các form dài trên web chưa nằm trong bản này. Xem validation để phân biệt phần đã build với luồng đã chạy thật.

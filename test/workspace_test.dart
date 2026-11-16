@@ -115,6 +115,21 @@ void main() {
         if (path == '/api/v1/tasks/12') {
           return json(taskFixture(status: status, token: token));
         }
+        if (path == '/api/v1/projects/1/execution-actions') {
+          return json({
+            'resourceType': 'PROJECT',
+            'resourceId': 1,
+            'projectId': 1,
+            'projectStatus': 'ACTIVE',
+            'actions': [
+              {
+                'code': 'create_task',
+                'allowed': false,
+                'reasons': ['PROJECT_MANAGER_REQUIRED'],
+              },
+            ],
+          });
+        }
         if (path.endsWith('/execution-actions')) {
           return json(capabilityFixture(status: status, token: token));
         }
