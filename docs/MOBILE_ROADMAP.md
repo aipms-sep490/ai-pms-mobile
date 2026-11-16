@@ -4,6 +4,8 @@
 
 ## Tiến độ ngày 16/11/2026
 
+Bản **0.4.0** bổ sung tạo/sửa/phân công task, xem việc toàn đồ án và dùng gợi ý AI để điền form. Trợ lý có chế độ PROGRESS theo dữ liệu BE để xem tiến độ/deadline ngay cả khi mô hình hỏi tự do chưa sẵn sàng. Chưa thay cấu hình provider AI trên BE.
+
 Theo ưu tiên mới của người dùng, **đồng bộ tính năng trước**; không chặn chat/call/AI để chờ nghiệm thu thiết bị đầy đủ. Bản 0.3.0 đưa chat, phòng họp tích hợp, trợ lý AI và kết quả công bố vào mobile; xem [phạm vi triển khai](MOBILE_COLLABORATION.md). Format/analyze/test/build vẫn là kiểm tra ngắn bắt buộc trước merge.
 
 MOB-04 đến MOB-08 đã có phần triển khai MVP sinh viên trong 0.2.0: project/milestone/thành viên, việc của tôi và trạng thái theo capability, lời mời, inbox, lịch/RSVP, đọc báo cáo/phản hồi. Xem [contract và giới hạn](MOBILE_MVP.md). Dashboard và các màn dùng chung backend staging; không dùng dữ liệu giả khi chạy app.
@@ -36,7 +38,7 @@ MOB-03A/MOB-09 được theo dõi riêng, không còn là điều kiện chặn 
 - **Supervisor:** project đang hướng dẫn, nhóm cần chú ý, lịch và đọc/viết phản hồi ngắn. Đối chiếu lại phạm vi với SRS vì bảng actor ghi Web/Responsive, còn external interface nhắc selected supervisor journeys. SRS còn ghi React Native và cần đồng bộ quyết định Flutter; task này không tự sửa tài liệu ở repo docs.
 - **Chat/call/AI và kết quả công bố:** đã triển khai trong 0.3.0; dùng chung BE với web, giữ quyền và thời điểm công bố tại BE. Còn nghiệm thu trao đổi giữa hai thiết bị, chất lượng media và quyền OS.
 - **External push:** task riêng cho backend lẫn app, gồm đăng ký/thu hồi device token, provider delivery, quyền thông báo, mở đúng màn hình và kiểm thử foreground/background/app đóng. Không cam kết push chỉ bằng việc bổ sung màn hình inbox.
-- **Ưu tiên tiếp theo:** hoàn chỉnh các thao tác ngắn còn thiếu theo nhu cầu thực tế (tạo/sửa task, phản hồi ngắn, soạn báo cáo gọn); sau đó external push, tối ưu SignalR cho chat và nghiệm thu native trước phát hành. Chưa đưa offline mutation, quản trị học vụ hoặc chấm điểm vào mobile.
+- **Ưu tiên tiếp theo:** soạn/nộp báo cáo gọn và phản hồi ngắn theo quyền; external push, tối ưu SignalR cho chat và nghiệm thu native trước phát hành. Tạo/sửa/phân công task đã có từ 0.4.0. Chưa đưa offline mutation, quản trị học vụ hoặc chấm điểm vào mobile.
 
 ## Mốc nghiệm thu
 

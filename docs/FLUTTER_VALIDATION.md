@@ -88,3 +88,17 @@ Nhánh `feat/mobile-chat-call-ai`, baseline `797c022`; đối chiếu BE develop
 - Sửa ánh xạ evidence dùng ID có tiền tố TASK-/MS-/PR-/MTG- đúng contract BE để mở màn có kiểm tra quyền; nguồn không được hỗ trợ giữ dạng tham chiếu đọc.
 
 Không có Android SDK/emulator tại máy Windows này; iOS cần macOS/Xcode. External push, SignalR và screenshare/recording chưa được triển khai. Phạm vi và các endpoint ở [MOBILE_COLLABORATION.md](MOBILE_COLLABORATION.md).
+
+## Soạn công việc và công cụ AI 0.4.0 — 16/11/2026
+
+Baseline `0018acf`, nhánh `feat/mobile-task-authoring`; contract BE `9eedf9a`, không đổi dependency hoặc native permission.
+
+- Tạo task theo `create_task`; yêu cầu mốc trong đồ án, ngành thuộc frozen registration snapshot/major requirements; công việc liên ngành cần một ngành chính. Chọn người phụ trách từ thành viên BE, gửi deadline UTC.
+- Sửa nội dung/deadline theo `update_task`, phân công riêng theo `assign_task`; đọc lại capability trước khi ghi. Giữ parentTaskId, không đưa assignee/discipline vào PUT nội dung. 409 khóa lưu đến khi tải authority mới, giữ bản đang soạn để đối chiếu; create không rõ kết quả không tự gửi lại.
+- Danh sách chuyển được giữa việc của tôi/toàn đồ án; tạo thành công quay về danh sách toàn đồ án để không làm mất dấu task mới chưa phân công cho mình.
+- AI có PROGRESS/TASK; PROGRESS dùng dữ liệu BE, bản nháp TASK mở trình soạn có kiểm tra quyền và kiểm tra thủ công trước khi tạo. Mode học vụ không gửi công cụ chỉ dùng cho đồ án.
+- Format/analyze đạt; 32 tests đạt. Kiểm tra mới gồm phạm vi ngành đã xác minh, bản nháp cần ngành chính, payload UTC/phân công, conflict giữ draft và parentTaskId, không ghi đè phân công, công cụ PROGRESS đọc lại hội thoại đã lưu. Các flow auth/chat/call/workspace cũ vẫn đạt.
+- API staging thật: login/dashboard/project capability/major requirements 200. Test account `create_task=false`; không thực hiện ghi task bằng tài khoản không có quyền. Project có frozen interdisciplinary scope, requirements rỗng được đối chiếu với frozen scope như web/BE.
+- POST assistant với `toolMode=PROGRESS` trả 200, `generationStatus=COMPLETED`, `answerType=GROUNDED` và evidence thật. Đây là công cụ dữ liệu hệ thống, không phải bằng chứng mô hình hỏi tự do đã phục hồi; chưa đổi cấu hình provider BE.
+
+Web release staging và APK được kiểm tra tại CI của PR trước merge. Kết quả native/runtime/iOS còn theo dõi riêng; không gửi tin nhắn cho người khác để kiểm tra task.

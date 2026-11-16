@@ -6,6 +6,7 @@ import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
 import '../dashboard/dashboard_model.dart';
 import 'workspace_models.dart';
+import 'task_editor_screen.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -27,6 +28,8 @@ class _TasksScreenState extends State<TasksScreen> {
   int _page = 1;
   String _filter = 'all';
   String _search = '';
+  bool _mine = true;
+  int _revision = 0;
   final _searchController = TextEditingController();
 
   @override
@@ -35,12 +38,12 @@ class _TasksScreenState extends State<TasksScreen> {
     super.dispose();
   }
 
-  Future<(StudentDashboard, PageData?)> _load() async {
+  Future<(StudentDashboard, PageData?, Json?)> _load() async {
     final dashboard = StudentDashboard.fromJson(
       await widget.auth.getJson('/api/v1/dashboards/student'),
     );
     final project = dashboard.project;
-    if (project == null) return (dashboard, null);
+    if (project == null) return (dashboard, null, null);
     if (widget.milestoneId != null) {
       final milestone = await widget.auth.getJson(
         '/api/v1/milestones/${widget.milestoneId}',
@@ -56,7 +59,7 @@ class _TasksScreenState extends State<TasksScreen> {
       queryParameters: {
         'page': '$_page',
         'pageSize': '20',
-        if (widget.milestoneId == null)
+        if (widget.milestoneId == null && _mine)
           'assigneeUserId': '${widget.auth.user!.id}',
         if (widget.milestoneId != null) 'milestoneId': '${widget.milestoneId}',
         if (_filter == 'progress') 'status': 'IN_PROGRESS',
@@ -69,19 +72,30 @@ class _TasksScreenState extends State<TasksScreen> {
     final result = PageData.fromJson(
       await widget.auth.request('/api/v1/tasks/project/${project.id}?$query'),
     );
-    return (dashboard, result);
+    final capability = await widget.auth.getJson(
+      '/api/v1/projects/${project.id}/execution-actions',
+    );
+    recordsOf(capability['actions']);
+    if (capability['resourceType'] != 'PROJECT' ||
+        capability['resourceId'] != project.id ||
+        capability['projectId'] != project.id) {
+      throw const FormatException('Invalid project capability');
+    }
+    return (dashboard, result, capability);
   }
 
   @override
   Widget build(
     BuildContext context,
-  ) => RemotePage<(StudentDashboard, PageData?)>(
-    key: ValueKey('$_page/$_filter/$_search'),
-    revision: widget.revision,
-    title: widget.milestoneId == null ? 'Việc của tôi' : 'Việc trong mốc',
+  ) => RemotePage<(StudentDashboard, PageData?, Json?)>(
+    key: ValueKey('$_page/$_filter/$_search/$_mine'),
+    revision: widget.revision + _revision,
+    title: widget.milestoneId == null
+        ? (_mine ? 'Việc của tôi' : 'Việc của đồ án')
+        : 'Việc trong mốc',
     load: _load,
     content: (context, data, refresh) {
-      final (dashboard, page) = data;
+      final (dashboard, page, capability) = data;
       if (page == null) {
         return const [
           Surface(
@@ -93,7 +107,57 @@ class _TasksScreenState extends State<TasksScreen> {
       }
       return [
         Text(dashboard.project!.title),
+        if (capability != null &&
+            executionAllowed(
+              capability,
+              type: 'PROJECT',
+              id: dashboard.project!.id,
+              projectId: dashboard.project!.id,
+              action: 'create_task',
+            )) ...[
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Tạo công việc'),
+            onPressed: () async {
+              final result = await Navigator.push<Json>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TaskEditorScreen(
+                    auth: widget.auth,
+                    projectId: dashboard.project!.id,
+                    milestoneId: widget.milestoneId,
+                  ),
+                ),
+              );
+              if (!mounted) return;
+              if (result != null) {
+                widget.onChanged();
+                setState(() {
+                  _mine = false;
+                  _filter = 'all';
+                  _search = '';
+                  _page = 1;
+                  _searchController.clear();
+                  _revision++;
+                });
+              } else {
+                await refresh();
+              }
+            },
+          ),
+        ],
         const SizedBox(height: 16),
+        if (widget.milestoneId == null)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Chỉ việc của tôi'),
+            value: _mine,
+            onChanged: (value) => setState(() {
+              _mine = value;
+              _page = 1;
+            }),
+          ),
         TextField(
           controller: _searchController,
           textInputAction: TextInputAction.search,
@@ -196,6 +260,26 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   bool _editing = false;
   String? _message;
   bool _failed = false;
+
+  Future<void> _edit(TaskAccess access, {bool assignment = false}) async {
+    if (_saving || _editing) return;
+    setState(() => _editing = true);
+    final result = await Navigator.push<Json>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TaskEditorScreen(
+          auth: widget.auth,
+          projectId: idOf(access.capability, 'projectId'),
+          taskId: widget.id,
+          assignmentOnly: assignment,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _editing = false);
+    if (result != null) widget.onChanged();
+    setState(() => _revision++);
+  }
 
   Future<(TaskAccess, List<Json>)> _load() async {
     final data = await Future.wait([
@@ -334,6 +418,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               textOf(task, 'title'),
               '${statusText(task['status'])} · Ưu tiên ${statusText(task['priority'])}',
             ),
+            if (access.allows('update_task') ||
+                access.allows('assign_task')) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (access.allows('update_task'))
+                    OutlinedButton.icon(
+                      onPressed: _saving || _editing
+                          ? null
+                          : () => _edit(access),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Sửa nội dung'),
+                    ),
+                  if (access.allows('assign_task'))
+                    OutlinedButton.icon(
+                      onPressed: _saving || _editing
+                          ? null
+                          : () => _edit(access, assignment: true),
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Phân công'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
             if (access.canChange &&
                 taskTransitions(textOf(task, 'status')).isNotEmpty)
               FilledButton.icon(

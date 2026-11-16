@@ -109,16 +109,29 @@ class TaskAccess {
   final Json capability;
 
   String get token => textOf(capability, 'concurrencyToken', '');
-  bool get canChange =>
+  bool get canChange => allows('change_task_status');
+  bool allows(String code) =>
       token.isNotEmpty &&
       textOf(task, 'concurrencyToken', '').replaceAll('-', '') ==
           token.replaceAll('-', '') &&
       task['status'] == capability['resourceStatus'] &&
-      recordsOf(capability['actions']).any(
-        (action) =>
-            action['code'] == 'change_task_status' && action['allowed'] == true,
-      );
+      recordsOf(capability['actions'])
+          .any((action) => action['code'] == code && action['allowed'] == true);
 }
+
+bool executionAllowed(
+  Json capability, {
+  required String type,
+  required int id,
+  required int projectId,
+  required String action,
+}) =>
+    capability['resourceType'] == type &&
+    capability['resourceId'] == id &&
+    capability['projectId'] == projectId &&
+    capability['projectStatus'] == 'ACTIVE' &&
+    recordsOf(capability['actions'])
+        .any((row) => row['code'] == action && row['allowed'] == true);
 
 Uri? externalUri(Object? value) {
   if (value is! String) return null;

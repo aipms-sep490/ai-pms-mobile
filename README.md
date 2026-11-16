@@ -4,18 +4,20 @@
 
 `develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi sinh viên — 0.3.0
+## Phạm vi sinh viên — 0.4.0
 
 - Login, khôi phục phiên và logout với tài khoản AI-PMS.
 - Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
 - Năm tab **Tổng quan / Đồ án / Công việc / Hộp thư / Tài khoản**, tải dữ liệu theo tab đã mở.
 - Đồ án hiện tại: nội dung, GVHD nếu có, nhóm/thành viên, milestone và tiến độ; mở công việc từ deadline hoặc milestone.
 - Việc của tôi: tìm kiếm, lọc trạng thái/quá hạn/bị chặn, phân trang, chi tiết và lịch sử. Đổi trạng thái chỉ khi capability BE cho phép, dùng concurrency token; bị chặn bắt buộc có lý do.
+- Công việc: chuyển giữa việc của tôi và toàn đồ án; tạo, sửa nội dung/deadline và phân công theo capability BE. Tạo task hỗ trợ ngành chính/hỗ trợ theo hồ sơ học thuật đã xác minh; sửa giữ quan hệ task cha và không ghi đè phân công.
 - Hộp thư: thông báo, lọc chưa đọc, đọc một/tất cả; điều hướng nội bộ kiểm tra quyền lại qua API. Nhận/từ chối lời mời nhóm của chính mình.
 - Lịch họp: chi tiết, liên kết HTTP(S) mở ngoài app, RSVP dùng token của người tham gia. Báo cáo và phản hồi giảng viên ở chế độ đọc.
 - Trò chuyện trực tiếp/nhóm/đồ án dùng cùng dữ liệu web: phân trang, trả lời, sửa/thu hồi theo quyền, thích, tệp, trạng thái đọc, tắt thông báo và tóm tắt AI. Mở qua biểu tượng chat trên thanh đầu trang.
 - Phòng họp tích hợp LiveKit: mở/tham gia/kết thúc theo capability BE, mic/camera mặc định tắt, xem video và rời phòng. Backend phải bật/cấu hình dịch vụ video và lịch phải cho phép tham gia.
 - Trợ lý AI: hỏi đáp học vụ/đồ án/kết hợp, lịch sử chung với web, tài liệu đính kèm, nguồn trích dẫn, cảnh báo/tiến độ, hỗ trợ bước tiếp theo, tóm tắt báo cáo và chuẩn bị họp; xem kết quả đã công bố.
+- Trong hội thoại AI có chế độ **Tiến độ & deadline** lấy dữ liệu hệ thống, **Nháp công việc** và mở gợi ý sang form tạo để kiểm tra trước khi lưu. Không tự tạo công việc từ câu trả lời AI.
 - Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
 - Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
 
