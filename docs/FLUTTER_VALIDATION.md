@@ -54,3 +54,23 @@ Không ghi mật khẩu/token hoặc dữ liệu cá nhân vào bằng chứng. 
 Widget test kiểm tra màn hình 375×667 với text scale 180%; đã sửa tràn nút đăng nhập được phát hiện bởi test. Luồng widget còn kiểm tra đăng nhập → lỗi dashboard/thử lại → tài khoản → landscape → đăng xuất.
 
 Review độc lập đã kiểm tra auth races/storage, lifecycle dashboard, quyền, Android permissions/backup/debug HTTP, iOS keychain entitlement linkage và cấu hình CI. iOS/runtime native vẫn cần kiểm thử riêng.
+
+## MVP sinh viên 0.2.0 — 16/11/2026
+
+Baseline `f6f3c54`, nhánh `feat/mobile-student-mvp`. Contract đối chiếu BE develop `9eedf9a` và staging; phạm vi chi tiết tại [MOBILE_MVP.md](MOBILE_MVP.md). Dùng Flutter 3.50.0/Dart 3.14.0; thêm plugin chính thức `url_launcher` 6.3.3, giữ lockfile do SDK tạo.
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| Format / analyze | Đạt; không có issue |
+| Unit/widget | 25 tests đạt: auth/API/storage, model, các flow cũ và workspace mới |
+| Task mutation | HTTP mock: capability/version khớp, 409 tải authority mới, bắt buộc lý do BLOCKED, khóa gửi lặp, 503 giữ dữ liệu cũ, 403 xóa nội dung, logout hủy route chi tiết |
+| Inbox/invitation | HTTP mock: phân trang, PATCH read, POST read-all, đúng người nhận/PENDING, xác nhận nhận lời mời, không gửi lặp |
+| Lịch/báo cáo | HTTP mock: RSVP dùng token người tham gia thay token meeting; đọc báo cáo dài và feedback trên 320×667, text scale 200% |
+| Lifecycle/accessibility | Response và callback đến sau logout/dispose không phục hồi màn cũ hoặc gọi setState trên page đã hủy; kiểm tra semantic action của hàng mở lịch và nhãn feedback có thể đọc |
+| Backend thật | Các API đọc project, team, milestone/progress, task/list/detail/history/capability, notification, invitation, meeting/collaboration và danh sách report trả 200. Không truy cập DB trực tiếp |
+| Ghi dữ liệu staging | Chưa nghiệm thu mutation trên bộ dữ liệu học vụ thử riêng; không lấy mock làm bằng chứng ghi DB thật |
+| Android/iOS runtime | Chưa xác minh: máy hiện không có Android SDK/emulator; iOS cần macOS/Xcode |
+
+Đã sửa các lỗi được test/audit bắt: ListTile bị lớp nền che hiệu ứng bấm; ExpansionTile dùng chung storage key với vị trí cuộn; brand đăng nhập tràn ở 320px/text 200%; hàng danh sách và nội dung dài thiếu nhãn semantics rõ ràng. Không thêm dữ liệu giả vào bản app.
+
+CI hiện build web release và `android-staging-debug-apk` với `config/staging.json`, không còn dùng API emulator cho artifact mới. Artifact giữ 7 ngày; build không thay thế nghiệm thu thiết bị/signing/store release. Không ghi credential, bearer token hoặc ảnh có thông tin cá nhân vào repo.

@@ -6,9 +6,16 @@ import '../auth/auth_controller.dart';
 import 'dashboard_model.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, required this.auth});
+  const DashboardScreen({
+    super.key,
+    required this.auth,
+    this.onOpenProject,
+    this.onOpenDeadline,
+  });
 
   final AuthController auth;
+  final VoidCallback? onOpenProject;
+  final ValueChanged<DashboardDeadline>? onOpenDeadline;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -389,6 +396,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Chưa đủ dữ liệu để hiển thị tiến độ.',
                 style: _caption,
               ),
+            if (widget.onOpenProject != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: widget.onOpenProject,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Xem chi tiết đồ án'),
+              ),
+            ],
           ] else ...[
             const Icon(
               Icons.folder_open_outlined,
@@ -440,7 +455,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           for (var index = 0; index < dashboard.deadlines.length; index++) ...[
             if (index > 0) const Divider(height: 1, color: AppColors.border),
-            _DeadlineRow(deadline: dashboard.deadlines[index]),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onOpenDeadline == null
+                    ? null
+                    : () => widget.onOpenDeadline!(dashboard.deadlines[index]),
+                child: _DeadlineRow(deadline: dashboard.deadlines[index]),
+              ),
+            ),
           ],
         ],
       ),

@@ -8,6 +8,7 @@ class StudentDashboard {
     required this.assignedOpenTasks,
     required this.assignedOverdueTasks,
     required this.deadlines,
+    this.teamId,
   });
 
   final DateTime asOfUtc;
@@ -18,6 +19,7 @@ class StudentDashboard {
   final int assignedOpenTasks;
   final int assignedOverdueTasks;
   final List<DashboardDeadline> deadlines;
+  final int? teamId;
 
   factory StudentDashboard.fromJson(Map<String, dynamic> json) {
     final context = _object(json['context']);
@@ -51,6 +53,7 @@ class StudentDashboard {
           ? null
           : _string(_object(semester)['name']),
       teamName: team == null ? null : _string(_object(team)['name']),
+      teamId: team == null ? null : _object(team)['id'] as int?,
       project: json['project'] == null
           ? null
           : DashboardProject.fromJson(_object(json['project'])),

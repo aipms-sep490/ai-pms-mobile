@@ -4,15 +4,19 @@
 
 `develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi nền tảng
+## Phạm vi MVP sinh viên — 0.2.0
 
 - Login, khôi phục phiên và logout với tài khoản AI-PMS.
 - Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
-- Hai tab **Tổng quan** và **Tài khoản**; dashboard gọi `GET /api/v1/dashboards/student`, có tải/lỗi/thử lại/làm mới.
+- Năm tab **Tổng quan / Đồ án / Công việc / Hộp thư / Tài khoản**, tải dữ liệu theo tab đã mở.
+- Đồ án hiện tại: nội dung, GVHD nếu có, nhóm/thành viên, milestone và tiến độ; mở công việc từ deadline hoặc milestone.
+- Việc của tôi: tìm kiếm, lọc trạng thái/quá hạn/bị chặn, phân trang, chi tiết và lịch sử. Đổi trạng thái chỉ khi capability BE cho phép, dùng concurrency token; bị chặn bắt buộc có lý do.
+- Hộp thư: thông báo, lọc chưa đọc, đọc một/tất cả; điều hướng nội bộ kiểm tra quyền lại qua API. Nhận/từ chối lời mời nhóm của chính mình.
+- Lịch họp: chi tiết, liên kết HTTP(S) mở ngoài app, RSVP dùng token của người tham gia. Báo cáo và phản hồi giảng viên ở chế độ đọc.
 - Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
 - Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
 
-Code dùng contract backend hiện hành. Đã kiểm tra login, tổng quan, làm mới và logout với backend staging qua trình duyệt; test tự động dùng HTTP mock. Xem phạm vi và giới hạn trong [validation Flutter](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
+Code đối chiếu contract BE và staging. Test tự động dùng HTTP mock; không suy native runtime từ web/build. Xem [validation Flutter](docs/FLUTTER_VALIDATION.md), [phạm vi và contract MVP](docs/MOBILE_MVP.md) và [roadmap](docs/MOBILE_ROADMAP.md).
 
 ## Chuẩn bị môi trường
 
@@ -77,20 +81,20 @@ dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
 flutter build web --release --dart-define=API_BASE_URL=http://localhost:5080
-flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:5080
+flutter build apk --debug --dart-define-from-file=config/staging.json
 ```
 
 Web output ở `build/web`; debug APK ở `build/app/outputs/flutter-apk/app-debug.apk` khi build thành công. Debug APK dành cho thử nghiệm, chưa phải bản phát hành đã ký để đưa lên store. iOS cần macOS/Xcode và kiểm tra riêng.
 
 GitHub Actions chạy format/analyze/test, web release build và Android debug APK build cho PR vào `develop` và push lên `develop`. CI dùng API origin công khai để biên dịch; không đăng nhập backend hoặc tự phát hành app.
 
-Khi CI build thành công, tải artifact `android-debug-apk` tại trang workflow run; artifact được giữ 7 ngày. APK CI được cấu hình cho Android emulator (`http://10.0.2.2:5080`) để kiểm tra biên dịch, không trỏ tới backend triển khai. Khi build để chạy với môi trường khác, truyền `API_BASE_URL` phù hợp qua `--dart-define` hoặc file define như hướng dẫn trên.
+Khi CI build thành công, tải artifact `android-staging-debug-apk` tại trang workflow run; artifact được giữ 7 ngày. APK dùng `config/staging.json`, kết nối backend HTTPS đã triển khai. Đổi môi trường bằng `--dart-define` hoặc file define; không đưa tài khoản vào cấu hình build.
 
 ## Cấu hình và phiên
 
 - `--dart-define` và giá trị từ file define có thể đọc được từ app đã build. Chỉ đặt cấu hình công khai, không đặt mật khẩu, signing key hoặc service credential.
 - Không commit token, mật khẩu hoặc cấu hình riêng của môi trường. Commit `pubspec.lock` để dependency nhất quán.
-- Endpoint: `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/me`, `/api/v1/auth/logout` và `/api/v1/dashboards/student`.
+- Endpoint và các thao tác được hỗ trợ: xem [contract MVP](docs/MOBILE_MVP.md).
 - Không lưu mật khẩu hoặc access token xuống storage. Web preview đăng nhập lại sau reload.
 - Quyền và chính sách học vụ do backend quyết định.
 
@@ -106,4 +110,4 @@ git push -u origin feat/ten-tinh-nang
 
 Mở PR với base **`develop`**, kiểm tra CI và review trước merge. Không code, push hoặc merge tính năng vào `main`.
 
-Ưu tiên nghiệm thu nền tảng với **backend/database thật và thiết bị mục tiêu** trước khi mở rộng project/task. Theo dõi push ngoài hệ thống và phát hành store thành các hạng mục riêng.
+Nghiệm thu trên Android/iOS mục tiêu vẫn cần kiểm tra secure storage, khôi phục phiên, bàn phím, back và liên kết mở ngoài app. External push và phát hành store là các hạng mục riêng.

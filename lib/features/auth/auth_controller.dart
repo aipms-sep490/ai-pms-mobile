@@ -284,14 +284,18 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> getJson(String path) async {
-    final value = await _getAuthorized(path);
+    final value = await request(path);
     if (value is! Map<String, dynamic>) {
       throw const ApiException('Phản hồi từ máy chủ không hợp lệ.');
     }
     return value;
   }
 
-  Future<Object?> _getAuthorized(String path) async {
+  Future<Object?> request(
+    String path, {
+    String method = 'GET',
+    Object? body,
+  }) async {
     final version = _generation;
     final current = _session;
     if (current == null) {
@@ -306,8 +310,18 @@ class AuthController extends ChangeNotifier {
     )) {
       token = await _refresh();
     }
-    Future<Object?> send(String bearer) =>
-        _api.request(path, headers: {'Authorization': 'Bearer $bearer'});
+    Future<Object?> send(String bearer) async {
+      if (version != _generation || _disposed) throw _changedSession;
+      final result = await _api.request(
+        path,
+        method: method,
+        body: body,
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+      if (version != _generation || _disposed) throw _changedSession;
+      return result;
+    }
+
     try {
       return await send(token);
     } on ApiException catch (error) {

@@ -84,8 +84,24 @@ class ApiClient {
       })().timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         // Server ProblemDetails may contain private provider/database details.
+        String? safeMessage;
+        if (response.statusCode == 409) {
+          try {
+            final problem = jsonDecode(utf8.decode(response.bodyBytes));
+            if (problem is Map<String, dynamic>) {
+              safeMessage = switch (problem['code'] ?? problem['errorCode']) {
+                'TASK_DEPENDENCY_BLOCKED' => 'Công việc còn phụ thuộc chưa hoàn tất. Kiểm tra các việc phụ thuộc trước khi tiếp tục.',
+                'PROJECT_NOT_ACTIVE' =>
+                  'Đồ án hiện không cho phép cập nhật công việc.',
+                _ => null,
+              };
+            }
+          } on FormatException {
+            // Use the safe status message for non-JSON errors.
+          }
+        }
         throw ApiException(
-          _statusMessage(response.statusCode),
+          safeMessage ?? _statusMessage(response.statusCode),
           statusCode: response.statusCode,
         );
       }

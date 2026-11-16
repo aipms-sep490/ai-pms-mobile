@@ -130,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
-              'AI-PMS · Phiên bản 0.1.0',
+              'AI-PMS · Phiên bản 0.2.0',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textMuted),
             ),
