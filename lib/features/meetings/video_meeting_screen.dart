@@ -59,6 +59,7 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
   bool _publishVideo = false;
   String? _error;
   Timer? _timer;
+  int _sessionVersion = 0;
   String get _path => '/api/v1/meetings/${widget.meetingId}/video';
   Json get _capabilities => _session?['capabilities'] is Json
       ? _session!['capabilities'] as Json
@@ -76,38 +77,40 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
   }
 
   Future<void> _refresh({bool quiet = false}) async {
+    final version = ++_sessionVersion;
     if (!quiet) setState(() => _busy = true);
     try {
       final session = await widget.auth.getJson('$_path/session');
-      if (mounted) {
-        setState(() {
-          _session = session;
-          if (!quiet) _error = null;
-        });
-      }
+      if (!mounted || version != _sessionVersion) return;
+      setState(() {
+        _session = session;
+        if (!quiet) _error = null;
+      });
       if (session['session'] is Json &&
           (session['session'] as Json)['status'] == 'ENDED' &&
           _room != null) {
         await _leave();
       }
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = errorText(error);
-          // Never keep actionable capabilities after access has been revoked.
-          _session = null;
-        });
-      }
+      if (!mounted || version != _sessionVersion) return;
+      setState(() {
+        _error = errorText(error);
+        // Never keep actionable capabilities after access has been revoked.
+        _session = null;
+      });
       if (error is ApiException && [401, 403, 404].contains(error.statusCode)) {
         await _leave();
       }
     } finally {
-      if (mounted && !quiet) setState(() => _busy = false);
+      if (mounted && !quiet && version == _sessionVersion) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _start() async {
     if (_busy || _capabilities['canStart'] != true) return;
+    _sessionVersion++;
     setState(() {
       _busy = true;
       _error = null;
@@ -126,6 +129,7 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
 
   Future<void> _join() async {
     if (_busy || _room != null || _capabilities['canJoin'] != true) return;
+    _sessionVersion++;
     setState(() {
       _busy = true;
       _error = null;
@@ -212,6 +216,7 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    _sessionVersion++;
     setState(() {
       _busy = true;
       _error = null;
@@ -255,6 +260,7 @@ class _VideoMeetingScreenState extends State<VideoMeetingScreen> {
 
   @override
   void dispose() {
+    _sessionVersion++;
     _timer?.cancel();
     unawaited(_leave());
     super.dispose();

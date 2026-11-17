@@ -41,3 +41,21 @@ Owners edited separate files and reviewed peer changes. Root handled integration
 - CI validates final web and staging Android APK before merge. Browser/fixtures do not prove real media, Bluetooth, native storage, iOS or physical-device usability; these remain native acceptance work.
 
 This is a code, interaction and visual assessment, not a user study or formal accessibility certification. No real academic writes or calls were performed for visual testing.
+
+## Interaction follow-up — 0.5.1, 17/11/2026
+
+Baseline `1476232`; the same three agents continued with separate ownership and independent review. This patch closes reproduced interaction failures without changing API payloads, dependencies, native permissions or the provider.
+
+| Reproduction | Fix and regression evidence |
+| --- | --- |
+| Back from AI/chat with unsent text, attachments or a reply silently discarded the draft | Native route guard offers keep/discard, including system Back; pending sends show wait feedback and release the guard after completion. Drafts remain memory-only. |
+| New-chat sheet overflowed by193px in812×375 at200% text | Scroll-controlled, safe-area sheet with native vertical scrolling. |
+| Long edit dialog overflowed above the landscape keyboard | Scrollable native dialog; save remains reachable. |
+| Inbox category403 removed the controls needed to return to notifications | Category rails remain outside data-only content; independent320dp/150% regression switches back successfully. The shared fix also covers activity status filters. |
+| A failed task query left only retry for the same query | Error-state clear action restores a valid query while preserving the milestone scope; successful-content header ordering remains intact. |
+| Removing the last row on page2 loaded page1 but subsequent refresh still requested page2 | Synchronize the page state, capture request inputs and ignore superseded loads; regression checks the next refresh requests page1 directly. |
+| An old video poll completed after a newer403 and restored Join | Session request versions discard late results and invalidate pending reads on start/join/end/dispose; deterministic regression performs reads only. |
+
+New regressions are in `conversation_interaction_test.dart`, `task_interaction_test.dart`, `mobile_interaction_test.dart` and `paged_records_test.dart`. The task draft/back regression also confirms existing behavior at320dp/200% without adding another create guard.
+
+This Windows host has no Android SDK, emulator or connected device tooling. Android APK compilation is checked in CI; real mic/camera, Bluetooth, secure storage restart and iOS remain separate acceptance work.

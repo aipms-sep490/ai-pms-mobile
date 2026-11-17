@@ -14,6 +14,7 @@ import '../dashboard/dashboard_model.dart';
 import '../workspace/workspace_models.dart';
 import '../ai/ai_screen.dart';
 import 'chat_controller.dart';
+import 'composer_exit_guard.dart';
 import 'chat_members_screen.dart';
 
 class ChatInboxScreen extends StatefulWidget {
@@ -87,9 +88,10 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
     final kind = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
+      isScrollControlled: true,
       builder: (sheet) => SafeArea(
         top: false,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -875,260 +877,265 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: ListenableBuilder(
-        listenable: _chat,
-        builder: (context, _) => Text(
-          textOf(_chat.conversation ?? {}, 'title', 'Trò chuyện'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) => ComposerExitGuard(
+    controller: _text,
+    sending: _sending,
+    hasContext: _reply != null || _attachments.isNotEmpty,
+    child: Scaffold(
+      appBar: AppBar(
+        title: ListenableBuilder(
+          listenable: _chat,
+          builder: (context, _) => Text(
+            textOf(_chat.conversation ?? {}, 'title', 'Trò chuyện'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-      ),
-      actions: [
-        PopupMenuButton<String>(
-          tooltip: 'Tùy chọn cuộc trò chuyện',
-          onSelected: (value) async {
-            if (value == 'members') {
-              await Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      ChatMembersScreen(auth: widget.auth, id: widget.id),
-                ),
-              );
-            } else {
-              final until = DateTime.tryParse(
-                textOf(_chat.conversation ?? {}, 'mutedUntil', ''),
-              );
-              final muted = until != null && until.isAfter(DateTime.now());
-              await _action(() async {
-                await widget.auth.request(
-                  '/api/v1/chat/conversations/${widget.id}/mute',
-                  method: 'PUT',
-                  body: {
-                    'mutedUntil': muted
-                        ? null
-                        : DateTime.now()
-                              .toUtc()
-                              .add(const Duration(hours: 8))
-                              .toIso8601String(),
-                  },
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Tùy chọn cuộc trò chuyện',
+            onSelected: (value) async {
+              if (value == 'members') {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ChatMembersScreen(auth: widget.auth, id: widget.id),
+                  ),
                 );
-              });
-            }
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(
-              value: 'members',
-              child: Text('Thành viên & trạng thái đọc'),
-            ),
-            PopupMenuItem(
-              value: 'mute',
-              child: Text('Tắt 8 giờ / bật lại thông báo'),
-            ),
-          ],
-        ),
-        IconButton(
-          tooltip: 'Tóm tắt bằng AI',
-          icon: const Icon(Icons.auto_awesome_outlined),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => AiDocumentScreen(
-                auth: widget.auth,
-                title: 'Tóm tắt trò chuyện',
-                load: () => widget.auth.request(
-                  '/api/v1/chat/conversations/${widget.id}/ai/summary',
-                  method: 'POST',
-                  body: {},
-                  requestTimeout: const Duration(seconds: 90),
+              } else {
+                final until = DateTime.tryParse(
+                  textOf(_chat.conversation ?? {}, 'mutedUntil', ''),
+                );
+                final muted = until != null && until.isAfter(DateTime.now());
+                await _action(() async {
+                  await widget.auth.request(
+                    '/api/v1/chat/conversations/${widget.id}/mute',
+                    method: 'PUT',
+                    body: {
+                      'mutedUntil': muted
+                          ? null
+                          : DateTime.now()
+                                .toUtc()
+                                .add(const Duration(hours: 8))
+                                .toIso8601String(),
+                    },
+                  );
+                });
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'members',
+                child: Text('Thành viên & trạng thái đọc'),
+              ),
+              PopupMenuItem(
+                value: 'mute',
+                child: Text('Tắt 8 giờ / bật lại thông báo'),
+              ),
+            ],
+          ),
+          IconButton(
+            tooltip: 'Tóm tắt bằng AI',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => AiDocumentScreen(
+                  auth: widget.auth,
+                  title: 'Tóm tắt trò chuyện',
+                  load: () => widget.auth.request(
+                    '/api/v1/chat/conversations/${widget.id}/ai/summary',
+                    method: 'POST',
+                    body: {},
+                    requestTimeout: const Duration(seconds: 90),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
-    ),
-    body: SafeArea(
-      child: ListenableBuilder(
-        listenable: _chat,
-        builder: (context, _) => LayoutBuilder(
-          builder: (context, viewport) => Column(
-            children: [
-              if ((_chat.loading && _chat.messages.isEmpty) || _busy)
-                const LinearProgressIndicator(
-                  semanticsLabel: 'Đang xử lý cuộc trò chuyện',
-                ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => _chat.refresh(),
-                  child: ListView.builder(
-                    controller: _scroll,
-                    reverse: true,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _chat.messages.length + 2,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _error != null || _chat.error != null
-                            ? Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Notice(
-                                  _error ?? _chat.error!,
-                                  retry: () => _chat.refresh(),
-                                ),
-                              )
-                            : const SizedBox.shrink();
-                      }
-                      final messageIndex = index - 1;
-                      if (messageIndex == _chat.messages.length) {
-                        return Center(
-                          child: _chat.hasMore
-                              ? TextButton(
-                                  onPressed: _chat.loading
-                                      ? null
-                                      : () => _chat.refresh(older: true),
-                                  child: const Text('Tin nhắn cũ hơn'),
+        ],
+      ),
+      body: SafeArea(
+        child: ListenableBuilder(
+          listenable: _chat,
+          builder: (context, _) => LayoutBuilder(
+            builder: (context, viewport) => Column(
+              children: [
+                if ((_chat.loading && _chat.messages.isEmpty) || _busy)
+                  const LinearProgressIndicator(
+                    semanticsLabel: 'Đang xử lý cuộc trò chuyện',
+                  ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => _chat.refresh(),
+                    child: ListView.builder(
+                      controller: _scroll,
+                      reverse: true,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _chat.messages.length + 2,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return _error != null || _chat.error != null
+                              ? Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Notice(
+                                    _error ?? _chat.error!,
+                                    retry: () => _chat.refresh(),
+                                  ),
                                 )
-                              : Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
+                              : const SizedBox.shrink();
+                        }
+                        final messageIndex = index - 1;
+                        if (messageIndex == _chat.messages.length) {
+                          return Center(
+                            child: _chat.hasMore
+                                ? TextButton(
+                                    onPressed: _chat.loading
+                                        ? null
+                                        : () => _chat.refresh(older: true),
+                                    child: const Text('Tin nhắn cũ hơn'),
+                                  )
+                                : Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 20,
+                                    ),
+                                    child: Text(
+                                      _chat.loading && _chat.messages.isEmpty
+                                          ? 'Đang tải cuộc trò chuyện…'
+                                          : _chat.messages.isEmpty
+                                          ? 'Chưa có tin nhắn trong cuộc trò chuyện.'
+                                          : 'Bắt đầu cuộc trò chuyện',
+                                    ),
                                   ),
-                                  child: Text(
-                                    _chat.loading && _chat.messages.isEmpty
-                                        ? 'Đang tải cuộc trò chuyện…'
-                                        : _chat.messages.isEmpty
-                                        ? 'Chưa có tin nhắn trong cuộc trò chuyện.'
-                                        : 'Bắt đầu cuộc trò chuyện',
-                                  ),
-                                ),
-                        );
-                      }
-                      final message = _chat
-                          .messages[_chat.messages.length - 1 - messageIndex];
-                      return _messageBubble(message);
-                    },
+                          );
+                        }
+                        final message = _chat
+                            .messages[_chat.messages.length - 1 - messageIndex];
+                        return _messageBubble(message);
+                      },
+                    ),
                   ),
                 ),
-              ),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: viewport.maxHeight * .55,
-                ),
-                child: SingleChildScrollView(
-                  reverse: true,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_reply != null)
-                        ListTile(
-                          title: Text(
-                            'Trả lời ${textOf(_reply!, 'senderName')}',
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: viewport.maxHeight * .55,
+                  ),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_reply != null)
+                          ListTile(
+                            title: Text(
+                              'Trả lời ${textOf(_reply!, 'senderName')}',
+                            ),
+                            subtitle: Text(
+                              textOf(_reply!, 'body', 'Tệp đính kèm'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Bỏ trả lời',
+                              onPressed: _sending
+                                  ? null
+                                  : () => setState(() => _reply = null),
+                              icon: const Icon(Icons.close),
+                            ),
                           ),
-                          subtitle: Text(
-                            textOf(_reply!, 'body', 'Tệp đính kèm'),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            tooltip: 'Bỏ trả lời',
-                            onPressed: _sending
-                                ? null
-                                : () => setState(() => _reply = null),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ),
-                      if (_attachments.isNotEmpty)
-                        HorizontalChoices(
-                          children: [
-                            for (final attachment in _attachments)
-                              InputChip(
-                                label: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 220,
+                        if (_attachments.isNotEmpty)
+                          HorizontalChoices(
+                            children: [
+                              for (final attachment in _attachments)
+                                InputChip(
+                                  label: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 220,
+                                    ),
+                                    child: Text(
+                                      textOf(attachment, 'fileName'),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                  child: Text(
-                                    textOf(attachment, 'fileName'),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                  onDeleted: _sending
+                                      ? null
+                                      : () => setState(
+                                          () => _attachments.remove(attachment),
+                                        ),
                                 ),
-                                onDeleted: _sending
+                            ],
+                          ),
+                        if (_chat.conversation != null &&
+                            _chat.conversation?['canSend'] != true)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'Bạn chỉ có thể đọc trong cuộc trò chuyện này.',
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                tooltip: 'Đính kèm tệp',
+                                onPressed:
+                                    _busy ||
+                                        _sending ||
+                                        _chat.conversation?['canSend'] != true
                                     ? null
-                                    : () => setState(
-                                        () => _attachments.remove(attachment),
-                                      ),
+                                    : _upload,
+                                icon: const Icon(Icons.attach_file),
                               ),
-                          ],
-                        ),
-                      if (_chat.conversation != null &&
-                          _chat.conversation?['canSend'] != true)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'Bạn chỉ có thể đọc trong cuộc trò chuyện này.',
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              tooltip: 'Đính kèm tệp',
-                              onPressed:
-                                  _busy ||
-                                      _sending ||
-                                      _chat.conversation?['canSend'] != true
-                                  ? null
-                                  : _upload,
-                              icon: const Icon(Icons.attach_file),
-                            ),
-                            Expanded(
-                              child: TextField(
-                                controller: _text,
-                                enabled:
-                                    !_sending &&
-                                    _chat.conversation?['canSend'] == true,
-                                minLines: 1,
-                                maxLines: 4,
-                                maxLength: 4000,
-                                decoration: InputDecoration(
-                                  hintText:
-                                      _chat.conversation?['canSend'] == true
-                                      ? 'Tin nhắn'
-                                      : 'Cuộc trò chuyện chỉ đọc',
-                                  counterText: '',
+                              Expanded(
+                                child: TextField(
+                                  controller: _text,
+                                  enabled:
+                                      !_sending &&
+                                      _chat.conversation?['canSend'] == true,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  maxLength: 4000,
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        _chat.conversation?['canSend'] == true
+                                        ? 'Tin nhắn'
+                                        : 'Cuộc trò chuyện chỉ đọc',
+                                    counterText: '',
+                                  ),
                                 ),
                               ),
-                            ),
-                            IconButton.filled(
-                              tooltip: 'Gửi tin nhắn',
-                              onPressed:
-                                  _sending ||
-                                      _busy ||
-                                      _chat.conversation?['canSend'] != true
-                                  ? null
-                                  : _send,
-                              icon: _sending
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.arrow_upward),
-                            ),
-                          ],
+                              IconButton.filled(
+                                tooltip: 'Gửi tin nhắn',
+                                onPressed:
+                                    _sending ||
+                                        _busy ||
+                                        _chat.conversation?['canSend'] != true
+                                    ? null
+                                    : _send,
+                                icon: _sending
+                                    ? const SizedBox.square(
+                                        dimension: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.arrow_upward),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1153,6 +1160,7 @@ class _ChatEditDialogState extends State<ChatEditDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('Sửa tin nhắn'),
     content: TextField(
       controller: _text,

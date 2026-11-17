@@ -8,6 +8,7 @@ import '../../ui/mobile_components.dart';
 import '../../ui/remote_page.dart';
 import '../../ui/paged_records.dart';
 import '../auth/auth_controller.dart';
+import '../chat/composer_exit_guard.dart';
 import '../dashboard/dashboard_model.dart';
 import '../workspace/inbox_screen.dart';
 import '../workspace/workspace_models.dart';
@@ -963,179 +964,186 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text(
-        'Hỏi trợ lý AI',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      actions: [
-        IconButton(
-          tooltip: 'Tùy chọn',
-          onPressed: _busy || _loading ? null : _options,
-          icon: const Icon(Icons.tune),
+  Widget build(BuildContext context) => ComposerExitGuard(
+    controller: _query,
+    sending: _busy,
+    hasContext: _file != null,
+    child: Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Hỏi trợ lý AI',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-      ],
-    ),
-    body: SafeArea(
-      child: LayoutBuilder(
-        builder: (context, viewport) => Column(
-          children: [
-            Expanded(
-              child: ListView(
-                controller: _scroll,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Text(
-                    '${_scopeLabel(_scope)} · ${_modeLabel(_mode)}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_loading || _busy)
-                    const LinearProgressIndicator(
-                      semanticsLabel: 'Trợ lý đang xử lý',
-                    ),
-
-                  if (_more)
-                    OutlinedButton(
-                      onPressed: _loading ? null : () => _load(older: true),
-                      child: const Text('Tin cũ hơn'),
-                    ),
-                  if (_turns.isEmpty && !_loading && _unsyncedResponse == null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const ContentSection(
-                          'Bạn muốn hỏi gì?',
-                          'Chọn một gợi ý hoặc viết câu hỏi bên dưới. AI chỉ dùng dữ liệu trong phạm vi bạn được phép xem.',
-                        ),
-                        for (final prompt in [
-                          if (widget.projectId != null)
-                            'Việc nào đang chặn tiến độ?',
-                          'Cần chuẩn bị gì trước buổi họp?',
-                          'Quy định nộp báo cáo là gì?',
-                        ])
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(prompt),
-                            trailing: const Icon(Icons.north_west, size: 18),
-                            onTap: _busy ? null : () => _query.text = prompt,
-                          ),
-                      ],
-                    ),
-                  for (final turn in _turns) ...[
-                    _AiQuestion(textOf(turn, 'query')),
-                    const SizedBox(height: 16),
-                    ...aiContent(
-                      context,
-                      widget.auth,
-                      objectOf(turn['response']),
-                      projectId: widget.projectId,
-                      includeFooter: false,
-                    ),
-                    const Divider(height: 32),
-                  ],
-                  if (_unsyncedResponse != null) ...[
-                    _AiQuestion(_unsyncedQuery!),
-                    const SizedBox(height: 16),
-                    ...aiContent(
-                      context,
-                      widget.auth,
-                      _unsyncedResponse!,
-                      projectId: widget.projectId,
-                      includeFooter: false,
-                    ),
-                  ],
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Notice(
-                        _error!,
-                        retry: _busy || _id == null ? null : _load,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: viewport.maxHeight * .5),
-              child: SingleChildScrollView(
-                reverse: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        actions: [
+          IconButton(
+            tooltip: 'Tùy chọn',
+            onPressed: _busy || _loading ? null : _options,
+            icon: const Icon(Icons.tune),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, viewport) => Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  controller: _scroll,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(20),
                   children: [
-                    if (_file != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: InputChip(
-                            label: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth:
-                                    MediaQuery.sizeOf(context).width - 120,
-                              ),
-                              child: Text(
-                                _file!.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            onDeleted: _busy
-                                ? null
-                                : () => setState(() => _file = null),
-                          ),
-                        ),
+                    Text(
+                      '${_scopeLabel(_scope)} · ${_modeLabel(_mode)}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loading || _busy)
+                      const LinearProgressIndicator(
+                        semanticsLabel: 'Trợ lý đang xử lý',
                       ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+
+                    if (_more)
+                      OutlinedButton(
+                        onPressed: _loading ? null : () => _load(older: true),
+                        child: const Text('Tin cũ hơn'),
+                      ),
+                    if (_turns.isEmpty &&
+                        !_loading &&
+                        _unsyncedResponse == null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          IconButton(
-                            tooltip: 'Đính kèm tài liệu cho AI',
-                            onPressed: _busy || _mode == 'PROGRESS'
-                                ? null
-                                : _attach,
-                            icon: const Icon(Icons.attach_file),
+                          const ContentSection(
+                            'Bạn muốn hỏi gì?',
+                            'Chọn một gợi ý hoặc viết câu hỏi bên dưới. AI chỉ dùng dữ liệu trong phạm vi bạn được phép xem.',
                           ),
-                          Expanded(
-                            child: TextField(
-                              controller: _query,
-                              enabled: !_busy,
-                              minLines: 1,
-                              maxLines: 4,
-                              maxLength: 2000,
-                              decoration: const InputDecoration(
-                                hintText: 'Câu hỏi của bạn…',
-                                counterText: '',
-                              ),
+                          for (final prompt in [
+                            if (widget.projectId != null)
+                              'Việc nào đang chặn tiến độ?',
+                            'Cần chuẩn bị gì trước buổi họp?',
+                            'Quy định nộp báo cáo là gì?',
+                          ])
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(prompt),
+                              trailing: const Icon(Icons.north_west, size: 18),
+                              onTap: _busy ? null : () => _query.text = prompt,
                             ),
-                          ),
-                          IconButton.filled(
-                            tooltip: _mode == 'PROGRESS'
-                                ? 'Xem tiến độ'
-                                : 'Gửi câu hỏi',
-                            onPressed: _busy || _loading ? null : _ask,
-                            icon: _busy
-                                ? const SizedBox.square(
-                                    dimension: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.arrow_upward),
-                          ),
                         ],
                       ),
-                    ),
+                    for (final turn in _turns) ...[
+                      _AiQuestion(textOf(turn, 'query')),
+                      const SizedBox(height: 16),
+                      ...aiContent(
+                        context,
+                        widget.auth,
+                        objectOf(turn['response']),
+                        projectId: widget.projectId,
+                        includeFooter: false,
+                      ),
+                      const Divider(height: 32),
+                    ],
+                    if (_unsyncedResponse != null) ...[
+                      _AiQuestion(_unsyncedQuery!),
+                      const SizedBox(height: 16),
+                      ...aiContent(
+                        context,
+                        widget.auth,
+                        _unsyncedResponse!,
+                        projectId: widget.projectId,
+                        includeFooter: false,
+                      ),
+                    ],
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Notice(
+                          _error!,
+                          retry: _busy || _id == null ? null : _load,
+                        ),
+                      ),
                   ],
                 ),
               ),
-            ),
-          ],
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: viewport.maxHeight * .5),
+                child: SingleChildScrollView(
+                  reverse: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_file != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: InputChip(
+                              label: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.sizeOf(context).width - 120,
+                                ),
+                                child: Text(
+                                  _file!.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              onDeleted: _busy
+                                  ? null
+                                  : () => setState(() => _file = null),
+                            ),
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              tooltip: 'Đính kèm tài liệu cho AI',
+                              onPressed: _busy || _mode == 'PROGRESS'
+                                  ? null
+                                  : _attach,
+                              icon: const Icon(Icons.attach_file),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _query,
+                                enabled: !_busy,
+                                minLines: 1,
+                                maxLines: 4,
+                                maxLength: 2000,
+                                decoration: const InputDecoration(
+                                  hintText: 'Câu hỏi của bạn…',
+                                  counterText: '',
+                                ),
+                              ),
+                            ),
+                            IconButton.filled(
+                              tooltip: _mode == 'PROGRESS'
+                                  ? 'Xem tiến độ'
+                                  : 'Gửi câu hỏi',
+                              onPressed: _busy || _loading ? null : _ask,
+                              icon: _busy
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.arrow_upward),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),

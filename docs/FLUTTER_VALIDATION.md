@@ -110,3 +110,11 @@ Baseline `7fd7b11`, nhánh `feat/mobile-ux-redesign`. Các agent phân công ri�
 - Format/analyze đạt; full suite35 tests đạt. Giữ hồi quy auth/API/concurrency/permissions; bổ sung rail48dp ở320dp/200%, bàn phím, swipe/tap và giữ trạng thái tab, unfocus khi đổi tab, reduced motion, AI landscape với keyboard, dashboard403/retry và RSVP chỉ gửi sau lựa chọn.
 - Chrome DevTools đọc trực tiếp giao diện375×812,320×667; dùng API fixture riêng để xem task quản lý, AI/chat, form và các trạng thái lỗi/rỗng/mất quyền. Không đưa fixture hoặc credential vào code/runtime staging. Chạy thử giao diện không thay bằng chứng DB/media/native.
 - Build web release và Wasm dry run được chạy bằng SDK chốt; final web/APK được CI kiểm tra trước merge. Không thêm package/native permission. iOS và nghiệm thu vật lý vẫn chưa xác minh.
+
+## Bản vá tương tác 0.5.1 — 17/11/2026
+
+Baseline `1476232`, nhánh `fix/mobile-interaction-polish`; cùng ba agent triển khai/review theo phạm vi riêng. Chi tiết tái hiện và sửa lỗi ở phần follow-up của [báo cáo UX](MOBILE_UX_REVIEW.md).
+
+- Full suite **46 tests đạt**: thêm11 hồi quy cho system Back AI/chat, bản soạn chỉ có context, gửi đang chờ, sheet/chat edit màn ngang, giữ draft task, xóa query task lỗi giữ milestone scope, inbox403 phục hồi category, phân trang sau khi mất dòng và video poll đến muộn. Các request ghi trong test đều đi qua MockClient; không phải mutation trên BE thật.
+- Không đổi auth/API contract, dependency, native permission hoặc provider. Bản soạn chỉ giữ trong bộ nhớ khi còn màn hình; chưa có khôi phục draft sau khi OS đóng app.
+- CI kiểm tra format/analyze/tests, release web và staging Android debug APK trước merge. Máy Windows hiện không có Android SDK/emulator/adb; chưa xác minh native runtime, secure storage restart, media/Bluetooth hoặc iOS.

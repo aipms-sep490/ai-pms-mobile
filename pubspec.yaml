@@ -1,7 +1,7 @@
 name: ai_pms_mobile
 description: AI-PMS student companion app.
 publish_to: none
-version: 0.5.0+5
+version: 0.5.1+6
 
 environment:
   sdk: ^3.14.0
