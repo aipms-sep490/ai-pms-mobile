@@ -30,47 +30,58 @@ class PagedRecords extends StatefulWidget {
 
 class _PagedRecordsState extends State<PagedRecords> {
   int _page = 1;
+  int _loadVersion = 0;
   @override
   void didUpdateWidget(covariant PagedRecords oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.path != oldWidget.path) _page = 1;
+    if (widget.path != oldWidget.path) {
+      _page = 1;
+      _loadVersion++;
+    }
+  }
+
+  Future<PageData> _load(String path, int page) async {
+    final version = ++_loadVersion;
+    final separator = path.contains('?') ? '&' : '?';
+    final data = PageData.fromJson(
+      await widget.auth.request('$path${separator}page=$page&pageSize=20'),
+    );
+    // Move the actual page state too: later refreshes must not revisit a page
+    // that disappeared after a mutation. A superseded request cannot move it.
+    if (mounted &&
+        version == _loadVersion &&
+        widget.path == path &&
+        _page == page &&
+        data.items.isEmpty &&
+        page > 1 &&
+        data.totalPages < page) {
+      setState(() => _page = data.totalPages < 1 ? 1 : data.totalPages);
+    }
+    return data;
   }
 
   @override
-  Widget build(BuildContext context) => RemotePage<PageData>(
-    key: ValueKey('${widget.path}/$_page'),
-    title: widget.title,
-    showHeading: widget.showHeading,
-    revision: widget.revision,
-    load: () async {
-      final separator = widget.path.contains('?') ? '&' : '?';
-      final data = PageData.fromJson(
-        await widget.auth.request(
-          '${widget.path}${separator}page=$_page&pageSize=20',
+  Widget build(BuildContext context) {
+    final path = widget.path;
+    final page = _page;
+    return RemotePage<PageData>(
+      key: ValueKey('$path/$page'),
+      title: widget.title,
+      showHeading: widget.showHeading,
+      revision: widget.revision,
+      leading: widget.leading,
+      load: () => _load(path, page),
+      content: (context, data, refresh) => [
+        if (data.items.isEmpty) Surface(child: Text(widget.emptyText)),
+        for (final row in data.items) widget.item(context, row, refresh),
+        const SizedBox(height: 8),
+        Pagination(
+          data: data,
+          change: (page) => setState(() {
+            _page = page;
+          }),
         ),
-      );
-      // The last item on a page can disappear after a mutation.
-      if (data.items.isEmpty && _page > 1 && data.totalPages < _page) {
-        final page = data.totalPages < 1 ? 1 : data.totalPages;
-        return PageData.fromJson(
-          await widget.auth.request(
-            '${widget.path}${separator}page=$page&pageSize=20',
-          ),
-        );
-      }
-      return data;
-    },
-    content: (context, data, refresh) => [
-      ...widget.leading,
-      if (data.items.isEmpty) Surface(child: Text(widget.emptyText)),
-      for (final row in data.items) widget.item(context, row, refresh),
-      const SizedBox(height: 8),
-      Pagination(
-        data: data,
-        change: (page) => setState(() {
-          _page = page;
-        }),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }

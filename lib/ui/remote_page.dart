@@ -14,6 +14,8 @@ class RemotePage<T> extends StatefulWidget {
     required this.content,
     this.revision = 0,
     this.actions = const [],
+    this.leading = const [],
+    this.errorActions = const [],
     this.showHeading = true,
   });
   final String title;
@@ -21,6 +23,8 @@ class RemotePage<T> extends StatefulWidget {
   final List<Widget> Function(BuildContext, T, Future<void> Function()) content;
   final int revision;
   final List<Widget> actions;
+  final List<Widget> leading;
+  final List<Widget> errorActions;
   final bool showHeading;
 
   @override
@@ -143,12 +147,14 @@ class RemotePageState<T> extends State<RemotePage<T>> {
                         children: widget.actions,
                       ),
                     ),
+                  ...widget.leading,
                   if (_error != null) ...[
                     Notice(
                       errorText(_error!),
                       retry: _loading ? null : _load,
                       detail: _data == null ? null : 'Đang hiển thị dữ liệu từ lần tải thành công gần nhất.',
                     ),
+                    ...widget.errorActions,
                     const SizedBox(height: 16),
                   ],
                   if (_data != null)

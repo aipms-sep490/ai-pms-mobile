@@ -114,6 +114,14 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
+  void _resetFilters({bool restoreScope = false}) => setState(() {
+    _filter = 'all';
+    _search = '';
+    _page = 1;
+    if (restoreScope) _mine = true;
+    _searchController.clear();
+  });
+
   @override
   Widget build(
     BuildContext context,
@@ -121,6 +129,15 @@ class _TasksScreenState extends State<TasksScreen> {
     key: ValueKey('$_page/$_filter/$_search/$_mine'),
     revision: widget.revision + _revision,
     showHeading: widget.showHeading,
+    errorActions: [
+      if (_filter != 'all' || _search.isNotEmpty || !_mine)
+        TextButton.icon(
+          key: const Key('task-error-clear'),
+          icon: const Icon(Icons.filter_alt_off_outlined),
+          label: const Text('Xóa bộ lọc'),
+          onPressed: () => _resetFilters(restoreScope: true),
+        ),
+    ],
     title: widget.milestoneId == null
         ? (_mine ? 'Việc của tôi' : 'Việc của đồ án')
         : 'Việc trong mốc',
@@ -248,12 +265,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.filter_alt_off_outlined),
                     label: const Text('Xóa bộ lọc'),
-                    onPressed: () => setState(() {
-                      _filter = 'all';
-                      _search = '';
-                      _page = 1;
-                      _searchController.clear();
-                    }),
+                    onPressed: _resetFilters,
                   ),
                 ],
               ],
