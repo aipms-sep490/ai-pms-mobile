@@ -5,10 +5,11 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode = 0});
+  const ApiException(this.message, {this.statusCode = 0, this.errorCode});
 
   final String message;
   final int statusCode;
+  final String? errorCode;
 
   @override
   String toString() => message;
@@ -27,6 +28,18 @@ class ApiUpload {
   final String contentType;
 }
 
+class ApiResponseData {
+  const ApiResponseData({
+    required this.body,
+    required this.headers,
+    required this.statusCode,
+  });
+
+  final Object? body;
+  final Map<String, String> headers;
+  final int statusCode;
+}
+
 class ApiClient {
   ApiClient({
     required String origin,
@@ -39,7 +52,9 @@ class ApiClient {
   final http.Client _client;
   final Duration timeout;
 
-  Uri _requestUri(String path) {
+  String get origin => _origin;
+
+  Uri validatedOrigin() {
     final base = Uri.tryParse(_origin);
     if (base == null ||
         !['http', 'https'].contains(base.scheme) ||
@@ -52,9 +67,16 @@ class ApiClient {
         'Chưa cấu hình địa chỉ API hợp lệ. Kiểm tra API_BASE_URL.',
       );
     }
+    return base;
+  }
+
+  Uri _requestUri(String path, {bool allowHub = false}) {
+    final base = validatedOrigin();
     final relative = Uri.tryParse(path);
+    final validPrefix =
+        path.startsWith('/api/v1/') || (allowHub && path.startsWith('/hubs/'));
     if (relative == null ||
-        !path.startsWith('/api/v1/') ||
+        !validPrefix ||
         relative.hasScheme ||
         relative.hasAuthority ||
         relative.hasFragment ||
@@ -70,34 +92,38 @@ class ApiClient {
       throw const ApiException('Đường dẫn API không hợp lệ.');
     }
     final resolved = base.resolveUri(relative);
-    if (resolved.origin != base.origin ||
-        !resolved.path.startsWith('/api/v1/')) {
+    final validResolved =
+        resolved.path.startsWith('/api/v1/') ||
+        (allowHub && resolved.path.startsWith('/hubs/'));
+    if (resolved.origin != base.origin || !validResolved) {
       throw const ApiException('Đường dẫn API không hợp lệ.');
     }
     return resolved;
   }
 
-  Future<Object?> request(
-    String path, {
-    String method = 'GET',
+  http.BaseRequest _buildRequest(
+    Uri uri, {
+    required String method,
     Map<String, String>? headers,
     Object? body,
-    Duration? requestTimeout,
     ApiUpload? upload,
-    bool binary = false,
-  }) async {
-    final uri = _requestUri(path);
+    List<ApiUpload> uploads = const [],
+    String accept = 'application/json',
+  }) {
+    final allUploads = [?upload, ...uploads];
     final http.BaseRequest request;
-    if (upload != null) {
+    if (allUploads.isNotEmpty || accept == 'application/x-ndjson') {
       final multipart = http.MultipartRequest(method, uri);
-      multipart.files.add(
-        http.MultipartFile.fromBytes(
-          upload.field,
-          upload.bytes,
-          filename: upload.name,
-          contentType: http.MediaType.parse(upload.contentType),
-        ),
-      );
+      for (final file in allUploads) {
+        multipart.files.add(
+          http.MultipartFile.fromBytes(
+            file.field,
+            file.bytes,
+            filename: file.name,
+            contentType: http.MediaType.parse(file.contentType),
+          ),
+        );
+      }
       if (body is Map<String, String>) multipart.fields.addAll(body);
       request = multipart;
     } else {
@@ -110,39 +136,79 @@ class ApiClient {
     }
     request
       ..followRedirects = false
-      ..headers.addAll({'Accept': 'application/json', ...?headers});
+      ..headers.addAll({'Accept': accept, ...?headers});
+    return request;
+  }
+
+  Future<Object?> request(
+    String path, {
+    String method = 'GET',
+    Map<String, String>? headers,
+    Object? body,
+    Duration? requestTimeout,
+    ApiUpload? upload,
+    bool binary = false,
+    bool allowHub = false,
+  }) async {
+    final result = await requestRaw(
+      path,
+      method: method,
+      headers: headers,
+      body: body,
+      requestTimeout: requestTimeout,
+      upload: upload,
+      binary: binary,
+      allowHub: allowHub,
+    );
+    return result.body;
+  }
+
+  Future<ApiResponseData> requestRaw(
+    String path, {
+    String method = 'GET',
+    Map<String, String>? headers,
+    Object? body,
+    Duration? requestTimeout,
+    ApiUpload? upload,
+    bool binary = false,
+    bool allowHub = false,
+  }) async {
+    final uri = _requestUri(path, allowHub: allowHub);
+    final req = _buildRequest(
+      uri,
+      method: method,
+      headers: headers,
+      body: body,
+      upload: upload,
+    );
     try {
       final response = await (() async {
-        final stream = await _client.send(request);
+        final stream = await _client.send(req);
         return http.Response.fromStream(stream);
       })().timeout(requestTimeout ?? timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        // Server ProblemDetails may contain private provider/database details.
-        String? safeMessage;
-        if (response.statusCode == 409) {
-          try {
-            final problem = jsonDecode(utf8.decode(response.bodyBytes));
-            if (problem is Map<String, dynamic>) {
-              safeMessage = switch (problem['code'] ?? problem['errorCode']) {
-                'TASK_DEPENDENCY_BLOCKED' => 'Công việc còn phụ thuộc chưa hoàn tất. Kiểm tra các việc phụ thuộc trước khi tiếp tục.',
-                'PROJECT_NOT_ACTIVE' =>
-                  'Đồ án hiện không cho phép cập nhật công việc.',
-                _ => null,
-              };
-            }
-          } on FormatException {
-            // Use the safe status message for non-JSON errors.
-          }
-        }
-        throw ApiException(
-          safeMessage ?? _statusMessage(response.statusCode),
+        throw _errorFromResponse(response.statusCode, response.bodyBytes);
+      }
+      if (response.statusCode == 204 || response.bodyBytes.isEmpty) {
+        return ApiResponseData(
+          body: null,
+          headers: response.headers,
           statusCode: response.statusCode,
         );
       }
-      if (response.statusCode == 204 || response.bodyBytes.isEmpty) return null;
-      if (binary) return response.bodyBytes;
+      if (binary) {
+        return ApiResponseData(
+          body: response.bodyBytes,
+          headers: response.headers,
+          statusCode: response.statusCode,
+        );
+      }
       try {
-        return jsonDecode(utf8.decode(response.bodyBytes));
+        return ApiResponseData(
+          body: jsonDecode(utf8.decode(response.bodyBytes)),
+          headers: response.headers,
+          statusCode: response.statusCode,
+        );
       } on FormatException {
         throw const ApiException('Phản hồi từ máy chủ không hợp lệ.');
       }
@@ -157,7 +223,102 @@ class ApiClient {
     }
   }
 
+  /// Sends a multipart NDJSON streaming request (used by AI Assistant V4).
+  Stream<String> requestNdjsonStream(
+    String path, {
+    String method = 'POST',
+    Map<String, String>? headers,
+    Map<String, String>? fields,
+    List<ApiUpload> uploads = const [],
+    Duration? requestTimeout,
+  }) async* {
+    final uri = _requestUri(path);
+    final req = _buildRequest(
+      uri,
+      method: method,
+      headers: headers,
+      body: fields,
+      uploads: uploads,
+      accept: 'application/x-ndjson',
+    );
+    final http.StreamedResponse response;
+    try {
+      response = await _client
+          .send(req)
+          .timeout(requestTimeout ?? const Duration(seconds: 90));
+    } on TimeoutException {
+      throw const ApiException('Kết nối quá thời gian chờ. Vui lòng thử lại.');
+    } catch (_) {
+      throw const ApiException(
+        'Không kết nối được máy chủ. Kiểm tra mạng và thử lại.',
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final bytes = await response.stream.toBytes();
+      throw _errorFromResponse(response.statusCode, bytes);
+    }
+    try {
+      await for (final line
+          in response.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
+        final trimmed = line.trim();
+        if (trimmed.isNotEmpty) yield trimmed;
+      }
+    } on ApiException {
+      rethrow;
+    } on TimeoutException {
+      throw const ApiException('Kết nối quá thời gian chờ. Vui lòng thử lại.');
+    } catch (_) {
+      throw const ApiException(
+        'Kết nối bị gián đoạn trong khi nhận phản hồi. Mở lại lịch sử để kiểm tra.',
+      );
+    }
+  }
+
   void close() => _client.close();
+}
+
+ApiException _errorFromResponse(int statusCode, Uint8List bodyBytes) {
+  // Server ProblemDetails may contain private provider/database details.
+  // Only map explicit, safe workflow error codes.
+  String? code;
+  String? safeMessage;
+  if (statusCode == 409 || statusCode == 422 || statusCode == 400) {
+    try {
+      final problem = jsonDecode(utf8.decode(bodyBytes));
+      if (problem is Map<String, dynamic>) {
+        final rawCode = problem['code'] ?? problem['errorCode'];
+        if (rawCode is String && rawCode.trim().isNotEmpty) {
+          code = rawCode.trim().toUpperCase();
+        }
+        safeMessage = switch (code) {
+          'TASK_DEPENDENCY_BLOCKED' => 'Công việc còn phụ thuộc chưa hoàn tất. Kiểm tra các việc phụ thuộc trước khi tiếp tục.',
+          'TASK_DEPENDENCY_IMPACT_PENDING' => 'Cần rà soát ảnh hưởng phụ thuộc của công việc trước khi chuyển trạng thái.',
+          'PROJECT_NOT_ACTIVE' =>
+            'Đồ án hiện không cho phép thực hiện thao tác này.',
+          'BLOCKER_REASON_TOO_SHORT' => 'Lý do bị chặn cần tối thiểu 15 ký tự để nhóm và giảng viên nắm rõ vướng mắc.',
+          'EVIDENCE_REQUIRED' => 'Công việc gắn mốc kiểm tra cần có ít nhất một minh chứng hợp lệ (READY) trước khi chuyển sang Hoàn thành.',
+          'INVALID_INITIAL_STATUS' =>
+            'Trạng thái khởi tạo chỉ cho phép Cần làm hoặc Đang làm.',
+          'REPORT_LOCKED' =>
+            'Báo cáo tiến độ đã bị khóa và không thể chỉnh sửa.',
+          'PEER_EVAL_REASON_TOO_SHORT' || 'PEER_EVALUATION_COMMENT_REQUIRED' =>
+            'Mức đánh giá dưới 50% cần ghi lý do rõ ràng (tối thiểu 30 ký tự).',
+          'RESTORE_WINDOW_EXPIRED' =>
+            'Đã quá thời gian hoàn tác xóa công việc.',
+          _ => null,
+        };
+      }
+    } on FormatException {
+      // Use the safe status message for non-JSON errors.
+    }
+  }
+  return ApiException(
+    safeMessage ?? _statusMessage(statusCode),
+    statusCode: statusCode,
+    errorCode: code,
+  );
 }
 
 bool _hasUnsafeSegments(String path) {
