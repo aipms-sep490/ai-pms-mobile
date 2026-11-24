@@ -2,7 +2,12 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/api_client.dart';
 import '../../ui/app_theme.dart';
+import '../../ui/mobile_components.dart';
+import '../../ui/remote_page.dart';
 import '../auth/auth_controller.dart';
+import '../calendar/calendar_screen.dart';
+import '../workspace/inbox_screen.dart';
+import '../workspace/workspace_models.dart';
 import 'dashboard_model.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -11,12 +16,14 @@ class DashboardScreen extends StatefulWidget {
     required this.auth,
     this.onOpenProject,
     this.onOpenDeadline,
+    this.onChanged,
     this.showHeading = true,
   });
 
   final AuthController auth;
   final VoidCallback? onOpenProject;
   final ValueChanged<DashboardDeadline>? onOpenDeadline;
+  final VoidCallback? onChanged;
   final bool showHeading;
 
   @override
@@ -25,6 +32,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   StudentDashboard? _data;
+  List<Json> _nextActions = const [];
   String? _error;
   bool _loading = true;
   int _loadVersion = 0;
@@ -58,8 +66,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }
     try {
-      final json = await widget.auth.getJson('/api/v1/dashboards/student');
-      final dashboard = StudentDashboard.fromJson(json);
+      final results = await Future.wait<Object?>([
+        widget.auth.getJson('/api/v1/dashboards/student'),
+        widget.auth
+            .request('/api/v1/students/me/next-actions')
+            .catchError((_) => null),
+      ]);
+      final dashboard = StudentDashboard.fromJson(results[0] as Json);
+      final actionsJson = results[1] is Json ? results[1] as Json : null;
+      final actions = actionsJson != null && actionsJson['items'] is List
+          ? recordsOf(actionsJson['items'])
+          : const <Json>[];
       if (!mounted ||
           version != _loadVersion ||
           accountId != widget.auth.user?.id) {
@@ -67,6 +84,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       setState(() {
         _data = dashboard;
+        _nextActions = actions;
         _error = null;
         _loading = false;
       });
@@ -84,8 +102,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (error is ApiException &&
             [401, 403, 404].contains(error.statusCode)) {
           _data = null;
+          _nextActions = const [];
         }
       });
+    }
+  }
+
+  Future<void> _openNextAction(Json item) async {
+    final kind = textOf(item, 'kind', '').toUpperCase();
+    final id = item['id'];
+    final targetType = kind.contains('TASK')
+        ? 'TASK'
+        : kind.contains('MEETING')
+        ? 'MEETING'
+        : kind.contains('REPORT')
+        ? 'PROGRESS_REPORT'
+        : kind.contains('MILESTONE')
+        ? 'MILESTONE'
+        : kind.contains('INVIT')
+        ? 'TEAM_INVITATION'
+        : null;
+    if (targetType != null && id is int && id > 0) {
+      await openEntity(
+        context,
+        widget.auth,
+        EntityTarget(targetType, id),
+        widget.onChanged ?? () {},
+      );
+      if (mounted) await _load(refresh: true);
+    } else if (widget.onOpenProject != null) {
+      widget.onOpenProject!();
     }
   }
 
@@ -106,7 +152,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color: AppColors.primary,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,15 +169,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                       ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       'Xin chào, ${widget.auth.user?.fullName ?? ''}',
-                      style: _body,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.text,
+                      ),
                     ),
+                    if (dashboard?.semesterName != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Học kỳ · ${dashboard!.semesterName!}',
+                        style: _caption,
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Lịch tổng hợp',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => CalendarScreen(
+                      auth: widget.auth,
+                      onChanged: widget.onChanged ?? () {},
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.calendar_month_outlined),
+              ),
               IconButton(
                 key: const Key('refresh-dashboard-button'),
                 tooltip: 'Làm mới tổng quan',
@@ -149,30 +219,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           if (_loading && dashboard == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
               child: Text('Đang tải tổng quan…', style: _body),
             ),
-          if (_error != null) ...[_errorNotice(), const SizedBox(height: 20)],
+          if (_error != null) ...[_errorNotice(), const SizedBox(height: 18)],
           if (dashboard != null) ...[
-            if (dashboard.semesterName != null) ...[
-              Text('Học kỳ · ${dashboard.semesterName!}', style: _caption),
-              const SizedBox(height: 12),
-            ],
-            _metrics(dashboard),
-            const SizedBox(height: 16),
             _project(dashboard),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Expanded(child: _SectionTitle('Hạn cần theo dõi')),
-                const SizedBox(width: 8),
-                Text('${dashboard.deadlines.length} mục', style: _caption),
-              ],
+            const SizedBox(height: 16),
+            _metrics(dashboard),
+            if (_nextActions.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              SectionHeader(
+                'Việc cần xử lý ngay',
+                trailing: StatusBadge(
+                  '${_nextActions.length} mục',
+                  tone: StatusTone.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final item in _nextActions.take(5))
+                RecordTile(
+                  title: textOf(item, 'title'),
+                  icon: Icons.bolt_outlined,
+                  urgent: const {
+                    'HIGH',
+                    'CRITICAL',
+                    'URGENT',
+                  }.contains(textOf(item, 'severity', '').toUpperCase()),
+                  badge: statusText(item['status']),
+                  badgeTone: StatusBadge.toneForStatus(
+                    item['status'] as String?,
+                  ),
+                  subtitle: item['dueAt'] != null
+                      ? 'Hạn · ${displayDate(item['dueAt'])}'
+                      : textOf(item, 'kind', 'Hành động tiếp theo'),
+                  onTap: () => _openNextAction(item),
+                ),
+            ],
+            const SizedBox(height: 22),
+            SectionHeader(
+              'Hạn cần theo dõi',
+              trailing: StatusBadge('${dashboard.deadlines.length} mục'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _deadlines(dashboard),
             const SizedBox(height: 24),
             Text(
@@ -187,24 +279,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _unsupportedRole() => ListView(
-    padding: const EdgeInsets.all(24),
+    padding: const EdgeInsets.all(20),
     children: const [
-      _Eyebrow('AI-PMS MOBILE'),
-      SizedBox(height: 16),
-      _SectionTitle('Không gian sinh viên'),
-      SizedBox(height: 24),
-      _Surface(
+      NavyHeroCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.school_outlined, color: AppColors.primary, size: 32),
-            SizedBox(height: 16),
-            _SectionTitle('Tài khoản đã được kết nối'),
+            Text(
+              'AI-PMS MOBILE',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: AppColors.amber,
+              ),
+            ),
             SizedBox(height: 8),
             Text(
-              'Tổng quan trên ứng dụng hiện dành cho sinh viên. Với vai trò hiện tại, '
-              'bạn có thể xem tài khoản tại đây và sử dụng các nghiệp vụ của mình trên web AI-PMS.',
-              style: _body,
+              'Tài khoản đã được kết nối',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onNavy,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Các nghiệp vụ quản trị học vụ chuyên sâu được tối ưu trên AI-PMS web. '
+              'Bạn có thể xem thông tin tài khoản tại ứng dụng này.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: AppColors.onNavyMuted,
+              ),
             ),
           ],
         ),
@@ -214,8 +321,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _errorNotice() => Semantics(
     liveRegion: true,
-    child: _Surface(
-      borderColor: AppColors.danger,
+    child: Surface(
+      borderColor: AppColors.dangerBorder,
+      color: AppColors.dangerSoft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -260,12 +368,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           value: dashboard.assignedOpenTasks,
           label: 'Việc đang mở',
           icon: Icons.check_box_outlined,
+          accent: AppColors.info,
           horizontal: stacked,
         ),
         _Metric(
           value: dashboard.assignedOverdueTasks,
           label: 'Việc quá hạn',
           icon: Icons.schedule_outlined,
+          accent: dashboard.assignedOverdueTasks > 0
+              ? AppColors.danger
+              : AppColors.success,
           danger: dashboard.assignedOverdueTasks > 0,
           horizontal: stacked,
         ),
@@ -273,10 +385,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           value: dashboard.unreadNotifications,
           label: 'Thông báo chưa đọc',
           icon: Icons.notifications_outlined,
+          accent: AppColors.primary,
           horizontal: stacked,
         ),
       ];
-      return _Surface(
+      return Surface(
         padding: EdgeInsets.zero,
         child: stacked
             ? Column(
@@ -309,110 +422,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _project(StudentDashboard dashboard) {
     final project = dashboard.project;
-    return _Surface(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _Eyebrow('Đồ án của bạn'),
-          const SizedBox(height: 12),
-          if (project != null) ...[
-            Semantics(
-              header: true,
-              child: Text(
-                project.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 20,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(project.code, style: _caption),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    dashboardStatusLabel(project.status),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Expanded(
-                  child: Text('Tiến độ công việc', style: _caption),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  project.progressPercentage == null
-                      ? '—'
-                      : '${project.progressPercentage!.round()}%',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (project.progressPercentage != null)
-              LinearProgressIndicator(
-                value: project.progressPercentage! / 100,
-                minHeight: 7,
-                color: AppColors.primary,
-                backgroundColor: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(4),
-                semanticsLabel: 'Tiến độ công việc của đồ án',
-                semanticsValue: '${project.progressPercentage!.round()}%',
-              )
-            else
-              const Text(
-                'Chưa đủ dữ liệu để hiển thị tiến độ.',
-                style: _caption,
-              ),
-            if (widget.onOpenProject != null) ...[
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: widget.onOpenProject,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('Xem chi tiết đồ án'),
-              ),
-            ],
-          ] else ...[
+    if (project == null) {
+      return Surface(
+        accentColor: AppColors.attentionBorder,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             const Icon(
               Icons.folder_open_outlined,
-              size: 32,
+              size: 30,
               color: AppColors.primary,
             ),
-            const SizedBox(height: 16),
-            _SectionTitle(
+            const SizedBox(height: 12),
+            Text(
               dashboard.teamName == null
                   ? 'Chưa có đồ án để theo dõi'
                   : 'Nhóm chưa có đồ án',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.navy,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -422,6 +452,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: _body,
             ),
           ],
+        ),
+      );
+    }
+    return NavyHeroCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'ĐỒ ÁN CỦA BẠN · ${project.code}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: AppColors.amber,
+                ),
+              ),
+              StatusBadge(
+                dashboardStatusLabel(project.status),
+                tone: StatusBadge.toneForStatus(project.status),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Semantics(
+            header: true,
+            child: Text(
+              project.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 19,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onNavy,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(
+                child: Text(
+                  'Tiến độ công việc',
+                  style: TextStyle(fontSize: 13, color: AppColors.onNavyMuted),
+                ),
+              ),
+              Text(
+                project.progressPercentage == null
+                    ? '—'
+                    : '${project.progressPercentage!.round()}%',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onNavy,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (project.progressPercentage != null)
+            LinearProgressIndicator(
+              value: (project.progressPercentage! / 100).clamp(0.0, 1.0),
+              minHeight: 7,
+              color: AppColors.teal,
+              backgroundColor: AppColors.navyRaised,
+              borderRadius: BorderRadius.circular(4),
+              semanticsLabel: 'Tiến độ công việc của đồ án',
+              semanticsValue: '${project.progressPercentage!.round()}%',
+            )
+          else
+            const Text(
+              'Chưa đủ dữ liệu để hiển thị tiến độ.',
+              style: TextStyle(fontSize: 13, color: AppColors.onNavyMuted),
+            ),
+          if (widget.onOpenProject != null) ...[
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.onNavy,
+                  backgroundColor: AppColors.navyRaised,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: widget.onOpenProject,
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                label: const Text('Xem chi tiết đồ án'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -429,7 +561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _deadlines(StudentDashboard dashboard) {
     if (dashboard.deadlines.isEmpty) {
-      return const _Surface(
+      return const Surface(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -438,7 +570,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: AppColors.textMuted,
               size: 28,
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 12),
             Text(
               'Chưa có hạn công việc hoặc mốc tiến độ cần theo dõi.',
               style: _body,
@@ -447,20 +579,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
-    return _Surface(
+    return Surface(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
           for (var index = 0; index < dashboard.deadlines.length; index++) ...[
             if (index > 0) const Divider(height: 1, color: AppColors.border),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.onOpenDeadline == null
-                    ? null
-                    : () => widget.onOpenDeadline!(dashboard.deadlines[index]),
-                child: _DeadlineRow(deadline: dashboard.deadlines[index]),
-              ),
+            InkWell(
+              onTap: widget.onOpenDeadline == null
+                  ? null
+                  : () => widget.onOpenDeadline!(dashboard.deadlines[index]),
+              child: _DeadlineRow(deadline: dashboard.deadlines[index]),
             ),
           ],
         ],
@@ -469,82 +598,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-const _body = TextStyle(fontSize: 16, height: 1.55, color: AppColors.textMuted);
+const _body = TextStyle(fontSize: 15, height: 1.5, color: AppColors.textMuted);
 const _caption = TextStyle(
   fontSize: 13,
-  height: 1.5,
+  height: 1.45,
   color: AppColors.textMuted,
 );
-
-class _Eyebrow extends StatelessWidget {
-  const _Eyebrow(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 13,
-      height: 1.5,
-      fontWeight: FontWeight.w700,
-      color: AppColors.textMuted,
-    ),
-  );
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    header: true,
-    child: Text(
-      text,
-      style: const TextStyle(
-        fontSize: 19,
-        height: 1.45,
-        fontWeight: FontWeight.w700,
-        color: AppColors.text,
-      ),
-    ),
-  );
-}
-
-class _Surface extends StatelessWidget {
-  const _Surface({
-    required this.child,
-    this.borderColor = AppColors.border,
-    this.padding = const EdgeInsets.all(20),
-  });
-
-  final Widget child;
-  final Color borderColor;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: AppColors.surface,
-      border: Border.all(color: borderColor),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: child,
-  );
-}
 
 class _Metric extends StatelessWidget {
   const _Metric({
     required this.value,
     required this.label,
     required this.icon,
+    required this.accent,
     this.danger = false,
     this.horizontal = false,
   });
   final int value;
   final String label;
   final IconData icon;
+  final Color accent;
   final bool danger;
   final bool horizontal;
 
@@ -554,18 +627,18 @@ class _Metric extends StatelessWidget {
     final valueText = Text(
       '$value',
       style: TextStyle(
-        fontSize: 24,
+        fontSize: 23,
         height: 1.25,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
         color: color,
       ),
     );
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(13),
       child: horizontal
           ? Row(
               children: [
-                Icon(icon, size: 20, color: color),
+                Icon(icon, size: 20, color: accent),
                 const SizedBox(width: 12),
                 Expanded(child: Text(label, style: _caption)),
                 const SizedBox(width: 12),
@@ -579,10 +652,10 @@ class _Metric extends StatelessWidget {
                   children: [
                     Expanded(child: valueText),
                     const SizedBox(width: 4),
-                    Icon(icon, size: 18, color: color),
+                    Icon(icon, size: 18, color: accent),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(label, style: _caption),
               ],
             ),
@@ -596,24 +669,24 @@ class _DeadlineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(15),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ExcludeSemantics(
           child: Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
               color: deadline.isOverdue
                   ? AppColors.dangerSoft
                   : AppColors.primarySoft,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(11),
             ),
             child: Icon(
               deadline.isMilestone
                   ? Icons.flag_outlined
                   : Icons.check_box_outlined,
-              size: 21,
+              size: 20,
               color: deadline.isOverdue ? AppColors.danger : AppColors.primary,
             ),
           ),
@@ -623,29 +696,38 @@ class _DeadlineRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                deadline.isMilestone ? 'Mốc tiến độ' : 'Công việc',
-                style: _caption,
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    deadline.isMilestone ? 'Mốc tiến độ' : 'Công việc',
+                    style: _caption,
+                  ),
+                  StatusBadge(
+                    dashboardStatusLabel(deadline.status),
+                    tone: StatusBadge.toneForStatus(deadline.status),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 deadline.title,
                 style: const TextStyle(
-                  fontSize: 16,
-                  height: 1.5,
+                  fontSize: 15.5,
+                  height: 1.4,
                   fontWeight: FontWeight.w600,
                   color: AppColors.text,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(dashboardStatusLabel(deadline.status), style: _caption),
-              const SizedBox(height: 4),
               Text(
                 '${deadline.isOverdue ? 'Quá hạn' : 'Hạn'} · ${deadline.formattedDue}',
                 style: TextStyle(
                   fontSize: 13,
-                  height: 1.5,
-                  fontWeight: FontWeight.w500,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
                   color: deadline.isOverdue
                       ? AppColors.danger
                       : AppColors.textMuted,

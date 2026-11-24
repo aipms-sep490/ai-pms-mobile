@@ -65,6 +65,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   final _scroll = ScrollController();
   final _title = TextEditingController();
   final _description = TextEditingController();
+  final _initialCriteria = TextEditingController();
   Json? _project;
   Json? _capability;
   Json? _task;
@@ -76,6 +77,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   int? _milestone;
   int? _primary;
   String? _priority = 'MEDIUM';
+  String _initialStatus = 'TODO';
   DateTime? _start;
   DateTime? _due;
   bool _loading = true;
@@ -122,6 +124,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     _scroll.dispose();
     _title.dispose();
     _description.dispose();
+    _initialCriteria.dispose();
     super.dispose();
   }
 
@@ -406,6 +409,10 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
                   for (final id in _supporting)
                     if (id != _primary) {'majorId': id, 'role': 'SUPPORTING'},
                 ],
+              if (_creating && _initialStatus != 'TODO')
+                'initialStatus': _initialStatus,
+              if (_creating && _parsedCriteria().isNotEmpty)
+                'initialCriteria': _parsedCriteria(),
               if (!_creating)
                 'concurrencyToken': TaskAccess(_task!, latest).token,
             };
@@ -461,6 +468,12 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  List<String> _parsedCriteria() => _initialCriteria.text
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
 
   void _revealError() {
     if (_scroll.hasClients) _scroll.jumpTo(0);
@@ -733,6 +746,44 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
                                               _dirty = true;
                                             }),
                                           ),
+                                          if (_creating) ...[
+                                            const SizedBox(height: 14),
+                                            DropdownButtonFormField<String>(
+                                              initialValue: _initialStatus,
+                                              isExpanded: true,
+                                              itemHeight: null,
+                                              decoration: const InputDecoration(
+                                                labelText:
+                                                    'Trạng thái khởi tạo',
+                                              ),
+                                              items: const [
+                                                DropdownMenuItem(
+                                                  value: 'TODO',
+                                                  child: Text('Cần làm'),
+                                                ),
+                                                DropdownMenuItem(
+                                                  value: 'IN_PROGRESS',
+                                                  child: Text('Đang làm ngay'),
+                                                ),
+                                              ],
+                                              onChanged: (v) => setState(() {
+                                                _initialStatus = v ?? 'TODO';
+                                                _dirty = true;
+                                              }),
+                                            ),
+                                            const SizedBox(height: 14),
+                                            TextFormField(
+                                              controller: _initialCriteria,
+                                              minLines: 2,
+                                              maxLines: 5,
+                                              onChanged: (_) =>
+                                                  setState(() => _dirty = true),
+                                              decoration: const InputDecoration(
+                                                labelText: 'Tiêu chí hoàn thành ban đầu (mỗi dòng 1 mục)',
+                                                alignLabelWithHint: true,
+                                              ),
+                                            ),
+                                          ],
                                           const SizedBox(height: 12),
                                           for (final start in [true, false])
                                             ListTile(

@@ -305,24 +305,26 @@ class SectionHeader extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.spaceBetween,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 8,
+    runSpacing: 6,
     children: [
-      Expanded(
-        child: Semantics(
-          header: true,
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              height: 1.35,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-              color: AppColors.navy,
-            ),
+      Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            height: 1.35,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            color: AppColors.navy,
           ),
         ),
       ),
-      if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+      ?trailing,
     ],
   );
 }
