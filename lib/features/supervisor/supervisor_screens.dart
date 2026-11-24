@@ -83,31 +83,18 @@ class SupervisorDashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'KHÔNG GIAN GIẢNG VIÊN',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                            color: AppColors.amber,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Xin chào, ${auth.user?.fullName ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onNavy,
-                          ),
-                        ),
-                      ],
+                  const Text(
+                    'KHÔNG GIAN GIẢNG VIÊN',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: AppColors.amber,
                     ),
                   ),
                   StatusBadge(
@@ -119,6 +106,15 @@ class SupervisorDashboardScreen extends StatelessWidget {
                         : StatusTone.neutral,
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Xin chào, ${auth.user?.fullName ?? ''}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onNavy,
+                ),
               ),
               const SizedBox(height: 16),
               Wrap(
