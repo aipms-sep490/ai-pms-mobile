@@ -381,7 +381,7 @@ class RecordTile extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     container: true,
     button: onTap != null,
-    label: badge == null ? '$title\n$subtitle' : '$title · $badge\n$subtitle',
+    label: badge == null ? '$title\n$subtitle' : '$title\n$badge\n$subtitle',
     onTap: onTap,
     child: ExcludeSemantics(
       child: Padding(

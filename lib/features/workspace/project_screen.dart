@@ -1,11 +1,13 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../ui/app_theme.dart';
 import '../../ui/remote_page.dart';
 import '../../ui/mobile_components.dart';
 import '../auth/auth_controller.dart';
 import '../ai/ai_screen.dart';
 import '../dashboard/dashboard_model.dart';
 import 'activity_screen.dart';
+import 'project_quick_actions_screen.dart';
 import 'tasks_screen.dart';
 import 'workspace_models.dart';
 
@@ -109,37 +111,78 @@ class ProjectScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
         ] else ...[
-          Surface(
+          NavyHeroCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(textOf(project, 'code')),
-                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      textOf(project, 'code'),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.amber,
+                      ),
+                    ),
+                    StatusBadge(
+                      statusText(project['status']),
+                      tone: StatusBadge.toneForStatus(
+                        project['status'] as String?,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 Text(
                   textOf(project, 'title'),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onNavy,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Text(statusText(project['status'])),
                 if (current?.supervisorName != null) ...[
-                  const SizedBox(height: 12),
-                  Text('GVHD: ${current!.supervisorName}'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'GVHD: ${current!.supervisorName}',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppColors.onNavyMuted,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 16),
                 if (current?.progressPercentage != null) ...[
                   Text(
                     'Tiến độ công việc · ${current!.progressPercentage!.round()}%',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onNavy,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
-                    value: current.progressPercentage! / 100,
+                    value: (current.progressPercentage! / 100).clamp(0.0, 1.0),
+                    minHeight: 7,
+                    color: AppColors.teal,
+                    backgroundColor: AppColors.navyRaised,
+                    borderRadius: BorderRadius.circular(4),
                     semanticsLabel: 'Tiến độ đồ án',
                     semanticsValue: '${current.progressPercentage!.round()}%',
                   ),
                 ] else
-                  const Text('Chưa đủ dữ liệu tiến độ.'),
+                  const Text(
+                    'Chưa đủ dữ liệu tiến độ.',
+                    style: TextStyle(color: AppColors.onNavyMuted),
+                  ),
               ],
             ),
           ),
@@ -183,6 +226,70 @@ class ProjectScreen extends StatelessWidget {
                   'Báo cáo & phản hồi',
                 ),
               ),
+              ActionChip(
+                avatar: const Icon(Icons.handshake_outlined, size: 18),
+                label: const Text('Quy ước nhóm'),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => WorkingAgreementScreen(
+                        auth: auth,
+                        projectId: idOf(project),
+                        onChanged: onChanged,
+                      ),
+                    ),
+                  );
+                  await refresh();
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.groups_outlined, size: 18),
+                label: const Text('Đánh giá chéo'),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => PeerEvaluationScreen(
+                        auth: auth,
+                        projectId: idOf(project),
+                        onChanged: onChanged,
+                      ),
+                    ),
+                  );
+                  await refresh();
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.checklist_outlined, size: 18),
+                label: const Text('Action Items'),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => ActionItemsScreen(
+                        auth: auth,
+                        projectId: idOf(project),
+                        onChanged: onChanged,
+                      ),
+                    ),
+                  );
+                  await refresh();
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.monitor_heart_outlined, size: 18),
+                label: const Text('Hồ sơ & sức khỏe'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProjectTrackingScreen(
+                      auth: auth,
+                      projectId: idOf(project),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -205,7 +312,10 @@ class ProjectScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Mốc tiến độ', style: Theme.of(context).textTheme.titleLarge),
+          SectionHeader(
+            'Mốc tiến độ',
+            trailing: StatusBadge('${data.milestones.length} mốc'),
+          ),
           const SizedBox(height: 12),
           if (data.milestones.isEmpty)
             const Surface(child: Text('Đồ án chưa có mốc tiến độ.')),
@@ -213,6 +323,10 @@ class ProjectScreen extends StatelessWidget {
             RecordTile(
               title: textOf(milestone, 'title'),
               icon: Icons.flag_outlined,
+              badge: statusText(milestone['status']),
+              badgeTone: StatusBadge.toneForStatus(
+                milestone['status'] as String?,
+              ),
               subtitle:
                   '${statusText(milestone['status'])}\nHạn: ${displayDate(milestone['dueDate'])}${_progressText(data.progress, idOf(milestone))}',
               onTap: () => Navigator.push(
@@ -228,7 +342,7 @@ class ProjectScreen extends StatelessWidget {
             ),
         ],
         const SizedBox(height: 24),
-        Text('Nhóm thực hiện', style: Theme.of(context).textTheme.titleLarge),
+        const SectionHeader('Nhóm thực hiện'),
         const SizedBox(height: 12),
         if (team == null)
           const Surface(
@@ -244,6 +358,10 @@ class ProjectScreen extends StatelessWidget {
           for (final member in recordsOf(team['members']))
             RecordTile(
               title: textOf(member, 'fullName'),
+              badge: member['isLeader'] == true ? 'Trưởng nhóm' : 'Thành viên',
+              badgeTone: member['isLeader'] == true
+                  ? StatusTone.primary
+                  : StatusTone.neutral,
               subtitle: member['isLeader'] == true
                   ? 'Trưởng nhóm'
                   : 'Thành viên',
