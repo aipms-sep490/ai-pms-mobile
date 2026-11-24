@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/api_client.dart';
 import '../../core/refresh_token_store.dart';
+import 'google_auth.dart';
 
 enum SessionStatus { loading, authenticated, anonymous }
 
@@ -19,6 +20,10 @@ class AuthUser {
   final String email;
   final String fullName;
   final List<String> roles;
+
+  bool get isStudent => roles.contains('STUDENT');
+  bool get isLecturer =>
+      roles.contains('LECTURER') || roles.contains('SUPERVISOR');
 
   factory AuthUser.fromJson(Object? value) {
     if (value is! Map<String, dynamic> ||
@@ -103,10 +108,21 @@ const _changedSession = ApiException(
 );
 
 class AuthController extends ChangeNotifier {
-  AuthController({required this._api, required this._storage});
+  AuthController({
+    required this._api,
+    required this._storage,
+    GoogleIdTokenProvider? googleProvider,
+    String? googleAuthOrigin,
+  }) : _googleProvider = googleProvider ?? PlatformGoogleIdTokenProvider(),
+       _googleAuthOrigin =
+           (googleAuthOrigin ??
+                   const String.fromEnvironment('GOOGLE_AUTH_ORIGIN'))
+               .trim();
 
   final ApiClient _api;
   final RefreshTokenStore _storage;
+  final GoogleIdTokenProvider _googleProvider;
+  final String _googleAuthOrigin;
   SessionStatus _status = SessionStatus.loading;
   _Session? _session;
   String? _savedRefreshToken;
@@ -117,8 +133,19 @@ class AuthController extends ChangeNotifier {
   Future<void> _persistence = Future<void>.value();
   bool _disposed = false;
 
+  ApiClient get api => _api;
   SessionStatus get status => _status;
   AuthUser? get user => _session?.user;
+
+  Map<String, String> _googleOriginHeaders([String? cookie]) {
+    final origin = _googleAuthOrigin.isNotEmpty
+        ? _googleAuthOrigin
+        : _api.origin;
+    return {
+      if (!kIsWeb && origin.isNotEmpty) 'Origin': origin,
+      if (!kIsWeb && cookie != null && cookie.isNotEmpty) 'Cookie': cookie,
+    };
+  }
 
   void _publish(SessionStatus next) {
     if (_disposed) return;
@@ -226,6 +253,23 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// Returns a valid bearer token for foreground SignalR / streaming calls.
+  Future<String> validAccessToken() async {
+    final current = _session;
+    if (current == null) {
+      throw const ApiException(
+        'Vui lòng đăng nhập để tiếp tục.',
+        statusCode: 401,
+      );
+    }
+    if (!current.expiresAt.isAfter(
+      DateTime.now().add(const Duration(seconds: 20)),
+    )) {
+      return _refresh();
+    }
+    return current.accessToken;
+  }
+
   Future<void> restore() => _restoreFlight ??= _restore();
 
   Future<void> _restore() async {
@@ -259,6 +303,109 @@ class AuthController extends ChangeNotifier {
       method: 'POST',
       body: {'email': email.trim(), 'password': password},
     );
+    await _completeLogin(value, version);
+  }
+
+  Future<void> signInWithGoogle() async {
+    final version = ++_generation;
+    _session = null;
+    _savedRefreshToken = null;
+    _publish(SessionStatus.anonymous);
+    await _persist(null, version);
+    try {
+      final challengeResponse = await _api.requestRaw(
+        '/api/v1/auth/google/challenge',
+        method: 'POST',
+        headers: _googleOriginHeaders(),
+        body: {'purpose': 'LOGIN'},
+      );
+      if (version != _generation || _disposed) throw _changedSession;
+      final challenge = GoogleChallengeData.fromResponse(challengeResponse);
+      final idToken = await _googleProvider.obtainIdToken(
+        clientId: challenge.clientId,
+        nonce: challenge.nonce,
+      );
+      if (version != _generation || _disposed) throw _changedSession;
+      if (!challenge.expiresAtUtc.isAfter(DateTime.now().toUtc())) {
+        throw const ApiException(
+          'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.',
+          statusCode: 401,
+        );
+      }
+      final loginResponse = await _api.request(
+        '/api/v1/auth/google/login',
+        method: 'POST',
+        headers: _googleOriginHeaders(challenge.bindingCookie),
+        body: {'challengeId': challenge.challengeId, 'idToken': idToken},
+      );
+      await _completeLogin(loginResponse, version);
+    } catch (error) {
+      throw ApiException(
+        googleAuthErrorMessage(error),
+        statusCode: error is ApiException ? error.statusCode : 0,
+      );
+    }
+  }
+
+  Future<void> linkGoogleAccount(String currentPassword) async {
+    if (currentPassword.isEmpty) {
+      throw const ApiException('Nhập mật khẩu hiện tại để liên kết Google.');
+    }
+    final token = await validAccessToken();
+    try {
+      final challengeResponse = await _api.requestRaw(
+        '/api/v1/auth/google/challenge',
+        method: 'POST',
+        headers: {'Authorization': 'Bearer $token', ..._googleOriginHeaders()},
+        body: {'purpose': 'LINK'},
+      );
+      final challenge = GoogleChallengeData.fromResponse(challengeResponse);
+      final idToken = await _googleProvider.obtainIdToken(
+        clientId: challenge.clientId,
+        nonce: challenge.nonce,
+      );
+      await _api.request(
+        '/api/v1/auth/google/link',
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ${await validAccessToken()}',
+          ..._googleOriginHeaders(challenge.bindingCookie),
+        },
+        body: {
+          'challengeId': challenge.challengeId,
+          'idToken': idToken,
+          'currentPassword': currentPassword,
+        },
+      );
+    } catch (error) {
+      throw ApiException(
+        googleAuthErrorMessage(error),
+        statusCode: error is ApiException ? error.statusCode : 0,
+      );
+    }
+  }
+
+  Future<void> unlinkGoogleAccount(String currentPassword) async {
+    if (currentPassword.isEmpty) {
+      throw const ApiException('Nhập mật khẩu hiện tại để hủy liên kết.');
+    }
+    final token = await validAccessToken();
+    try {
+      await _api.request(
+        '/api/v1/auth/google/unlink',
+        method: 'POST',
+        headers: {'Authorization': 'Bearer $token', ..._googleOriginHeaders()},
+        body: {'currentPassword': currentPassword},
+      );
+    } catch (error) {
+      throw ApiException(
+        googleAuthErrorMessage(error),
+        statusCode: error is ApiException ? error.statusCode : 0,
+      );
+    }
+  }
+
+  Future<void> _completeLogin(Object? value, int version) async {
     try {
       final next = _Session.fromJson(value);
       final current = await _api.request(
@@ -289,6 +436,27 @@ class AuthController extends ChangeNotifier {
       throw const ApiException('Phản hồi từ máy chủ không hợp lệ.');
     }
     return value;
+  }
+
+  Stream<String> requestNdjsonStream(
+    String path, {
+    Map<String, String>? fields,
+    List<ApiUpload> uploads = const [],
+    Duration? requestTimeout,
+  }) async* {
+    final version = _generation;
+    final token = await validAccessToken();
+    if (version != _generation || _disposed) throw _changedSession;
+    await for (final line in _api.requestNdjsonStream(
+      path,
+      headers: {'Authorization': 'Bearer $token'},
+      fields: fields,
+      uploads: uploads,
+      requestTimeout: requestTimeout,
+    )) {
+      if (version != _generation || _disposed) throw _changedSession;
+      yield line;
+    }
   }
 
   Future<Object?> request(

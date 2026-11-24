@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/api_client.dart';
 import '../../ui/app_theme.dart';
+import '../../ui/mobile_components.dart';
 import 'auth_controller.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -20,7 +21,10 @@ class _SignInScreenState extends State<SignInScreen> {
   final _passwordFocus = FocusNode();
   bool _showPassword = false;
   bool _busy = false;
+  bool _googleBusy = false;
   String? _error;
+
+  bool get _anyBusy => _busy || _googleBusy;
 
   @override
   void dispose() {
@@ -31,7 +35,7 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _submit() async {
-    if (_busy || !_formKey.currentState!.validate()) return;
+    if (_anyBusy || !_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -50,6 +54,28 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  Future<void> _submitGoogle() async {
+    if (_anyBusy) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _googleBusy = true;
+      _error = null;
+    });
+    try {
+      await widget.auth.signInWithGoogle();
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Chưa thể đăng nhập bằng Google. Bạn có thể đăng nhập bằng mật khẩu.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _googleBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -57,72 +83,111 @@ class _SignInScreenState extends State<SignInScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(maxWidth: 500),
             child: AutofillGroup(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                 children: [
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.navy,
-                          borderRadius: BorderRadius.circular(12),
+                  NavyHeroCard(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              child: const Icon(
+                                Icons.layers_outlined,
+                                color: AppColors.onNavy,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'AI-PMS',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                      color: AppColors.onNavy,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Quản lý tiến độ đồ án học phần',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppColors.onNavyMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.layers_outlined,
-                          color: AppColors.surface,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Text(
-                          'AI-PMS',
-                          style: textTheme.titleLarge?.copyWith(
-                            color: AppColors.navy,
-                            fontWeight: FontWeight.w800,
+                        const SizedBox(height: 18),
+                        Semantics(
+                          header: true,
+                          child: const Text(
+                            'Chào mừng trở lại',
+                            style: TextStyle(
+                              fontSize: 24,
+                              height: 1.25,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              color: AppColors.onNavy,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      'Chào mừng trở lại',
-                      style: textTheme.headlineMedium,
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Theo dõi tiến độ, báo cáo, trao đổi và hỗ trợ AI đồng bộ cùng bản web.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.5,
+                            color: AppColors.onNavyMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Đăng nhập để theo dõi tiến độ và công việc đồ án của bạn.',
-                    style: textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: AppColors.cardShadow,
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('Sử dụng tài khoản được trường cấp.'),
-                          const SizedBox(height: 24),
+                          Text(
+                            'Sử dụng tài khoản được trường cấp.',
+                            style: textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 20),
                           TextFormField(
                             key: const Key('email-field'),
                             controller: _email,
-                            enabled: !_busy,
+                            enabled: !_anyBusy,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             autofillHints: const [AutofillHints.username],
@@ -141,12 +206,12 @@ class _SignInScreenState extends State<SignInScreen> {
                                 ? null
                                 : 'Nhập địa chỉ email hợp lệ.',
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
                           TextFormField(
                             key: const Key('password-field'),
                             controller: _password,
                             focusNode: _passwordFocus,
-                            enabled: !_busy,
+                            enabled: !_anyBusy,
                             obscureText: !_showPassword,
                             autofillHints: const [AutofillHints.password],
                             autocorrect: false,
@@ -165,7 +230,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   minWidth: 48,
                                   minHeight: 48,
                                 ),
-                                onPressed: _busy
+                                onPressed: _anyBusy
                                     ? null
                                     : () => setState(
                                         () => _showPassword = !_showPassword,
@@ -184,29 +249,41 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                           if (_error != null) ...[
                             const SizedBox(height: 16),
-                            Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                _error!,
-                                style: const TextStyle(
-                                  color: AppColors.danger,
-                                  height: 1.5,
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.dangerSoft,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.dangerBorder,
+                                ),
+                              ),
+                              child: Semantics(
+                                liveRegion: true,
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.5,
+                                  ),
                                 ),
                               ),
                             ),
                           ],
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
                           FilledButton(
                             key: const Key('sign-in-button'),
-                            onPressed: _busy ? null : _submit,
+                            onPressed: _anyBusy ? null : _submit,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 if (_busy) ...[
                                   const SizedBox.square(
-                                    dimension: 22,
+                                    dimension: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
+                                      color: AppColors.onNavy,
                                       semanticsLabel: 'Đang đăng nhập',
                                     ),
                                   ),
@@ -219,9 +296,76 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                 ),
                                 if (!_busy) ...[
-                                  const SizedBox(width: 12),
-                                  const Icon(Icons.arrow_forward, size: 20),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.arrow_forward, size: 18),
                                 ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Row(
+                            children: [
+                              Expanded(child: Divider()),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  'hoặc',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ),
+                              Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton(
+                            key: const Key('google-sign-in-button'),
+                            onPressed: _anyBusy ? null : _submitGoogle,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (_googleBusy) ...[
+                                  const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      semanticsLabel: 'Đang đăng nhập Google',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                ] else ...[
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.infoBg,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: AppColors.infoBorder,
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'G',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                        color: AppColors.info,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    _googleBusy
+                                        ? 'Đang xác thực Google…'
+                                        : 'Tiếp tục với Google',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -229,7 +373,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                   const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -241,7 +385,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Dùng cùng tài khoản với AI-PMS trên web.',
+                          'Dùng cùng tài khoản sinh viên hoặc giảng viên với AI-PMS trên web.',
                           style: TextStyle(
                             fontSize: 13,
                             height: 1.5,
