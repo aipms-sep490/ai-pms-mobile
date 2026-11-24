@@ -4,28 +4,21 @@
 
 `develop` là nhánh mặc định và nhánh tích hợp. Nền tảng chuyển từ Expo sang Flutter theo lựa chọn của người dùng; xem [quyết định chuyển đổi](docs/FLUTTER_MIGRATION.md).
 
-## Phạm vi sinh viên — 0.5.1
+## Phạm vi ứng dụng — 0.9.0
 
-UI 0.5.0 gom thao tác phụ vào sheet/menu, bộ lọc cuộn ngang, form có vùng lưu cố định và điều hướng tab có thể vuốt. Xem [audit, phân công và kiểm tra giao diện](docs/MOBILE_UX_REVIEW.md).
+Phiên bản 0.9.0 đồng bộ giao diện theo hệ màu **FAMS** của bản Web, cập nhật quy tắc BE V4.0, bổ sung thao tác nhanh cho sinh viên, SignalR realtime foreground, AI V4 streaming, đăng nhập Google và chế độ đồng hành cho Giảng viên:
 
-Bản vá 0.5.1 bảo vệ nội dung chat/AI chưa gửi khi quay lại, sửa sheet/dialog ở màn hình ngang và bổ sung phục hồi bộ lọc, phân trang, quyền vào phòng họp sau phản hồi đến muộn.
+- Login bằng Email/Mật khẩu hoặc **Google Sign-In** (challenge + binding cookie + `google_sign_in`), khôi phục phiên, liên kết Google và quản lý **Avatar hồ sơ**.
+- Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview giữ phiên ở bộ nhớ.
+- **Không gian Sinh viên** (5 tab **Tổng quan / Đồ án / Công việc / Hộp thư / Tài khoản**): mục *Việc cần xử lý ngay*, **Lịch tổng hợp**, đồ án/mốc/thành viên, **Quy ước làm việc** 1 chạm, **Đánh giá chéo** (bắt buộc giải trình ≥ 30 ký tự khi < 50%), **Action Items**, theo dõi hồ sơ/sức khỏe/lịch sử kết quả (chỉ đọc).
+- **Công việc V4:** việc của tôi/toàn đồ án, tạo/sửa/phân công theo capability & ngành, tạo nhanh 1 bước (`initialStatus`, `initialCriteria`), lý do `BLOCKED` ≥ 15 ký tự, báo rõ lỗi `422` thiếu minh chứng `DONE`, **bình luận task**, **checklist tiêu chí**, **nhãn/taxonomy** và **xóa mềm + hoàn tác 5 giây**.
+- **Báo cáo & Lịch họp:** soạn/lưu nháp/nộp **báo cáo tiến độ gọn** tự điền từ BE (`/progress-reports/prefill`), RSVP, phòng họp LiveKit, **tóm tắt AI sau họp**.
+- **SignalR Realtime foreground:** kết nối `/hubs/chat` (tin nhắn tức thì, đang nhập, presence, `AccessRevoked`) và `/hubs/notifications` (badge chưa đọc trực tiếp), tự lùi về REST khi mất kết nối; hỗ trợ **chuyển tin nhắn chat thành công việc**. Chưa bao gồm external push ngoài màn hình khóa (FCM/APNs).
+- **Trợ lý AI V4:** streaming câu trả lời (NDJSON), đổi tên/ghim/xóa hội thoại, góp ý câu trả lời, gợi ý câu hỏi tiếp theo, đính kèm tài liệu, công cụ `PROGRESS`/`TASK` và xem kết quả công bố.
+- **Chế độ Giảng viên (`LECTURER`):** 4 tab riêng (**Tổng quan & Triage Queue / Đồ án hướng dẫn / Hộp thư / Tài khoản**), duyệt/từ chối yêu cầu hướng dẫn, viết nhận xét ngắn cho báo cáo & cuộc họp, dùng chung chat/LiveKit/AI/inbox.
+- Dùng Material UI qua `material_ui`, quản lý trạng thái bằng SDK, HTTP qua `http`, WebSocket SignalR qua `web_socket_channel` và Google Sign-In qua `google_sign_in`.
 
-- Login, khôi phục phiên và logout với tài khoản AI-PMS.
-- Native lưu refresh token bằng `flutter_secure_storage`; access token ở bộ nhớ. Web preview chỉ giữ phiên trong bộ nhớ.
-- Năm tab **Tổng quan / Đồ án / Công việc / Hộp thư / Tài khoản**, tải dữ liệu theo tab đã mở.
-- Đồ án hiện tại: nội dung, GVHD nếu có, nhóm/thành viên, milestone và tiến độ; mở công việc từ deadline hoặc milestone.
-- Việc của tôi: tìm kiếm, lọc trạng thái/quá hạn/bị chặn, phân trang, chi tiết và lịch sử. Đổi trạng thái chỉ khi capability BE cho phép, dùng concurrency token; bị chặn bắt buộc có lý do.
-- Công việc: chuyển giữa việc của tôi và toàn đồ án; tạo, sửa nội dung/deadline và phân công theo capability BE. Tạo task hỗ trợ ngành chính/hỗ trợ theo hồ sơ học thuật đã xác minh; sửa giữ quan hệ task cha và không ghi đè phân công.
-- Hộp thư: thông báo, lọc chưa đọc, đọc một/tất cả; điều hướng nội bộ kiểm tra quyền lại qua API. Nhận/từ chối lời mời nhóm của chính mình.
-- Lịch họp: chi tiết, liên kết HTTP(S) mở ngoài app, RSVP dùng token của người tham gia. Báo cáo và phản hồi giảng viên ở chế độ đọc.
-- Trò chuyện trực tiếp/nhóm/đồ án dùng cùng dữ liệu web: phân trang, trả lời, sửa/thu hồi theo quyền, thích, tệp, trạng thái đọc, tắt thông báo và tóm tắt AI. Mở qua biểu tượng chat trên thanh đầu trang.
-- Phòng họp tích hợp LiveKit: mở/tham gia/kết thúc theo capability BE, mic/camera mặc định tắt, xem video và rời phòng. Backend phải bật/cấu hình dịch vụ video và lịch phải cho phép tham gia.
-- Trợ lý AI: hỏi đáp học vụ/đồ án/kết hợp, lịch sử chung với web, tài liệu đính kèm, nguồn trích dẫn, cảnh báo/tiến độ, hỗ trợ bước tiếp theo, tóm tắt báo cáo và chuẩn bị họp; xem kết quả đã công bố.
-- Trong hội thoại AI có chế độ **Tiến độ & deadline** lấy dữ liệu hệ thống, **Nháp công việc** và mở gợi ý sang form tạo để kiểm tra trước khi lưu. Không tự tạo công việc từ câu trả lời AI.
-- Ưu tiên vai trò `STUDENT`; backend quyết định quyền và phạm vi dữ liệu.
-- Dùng Material UI qua package chính thức `material_ui`, quản lý trạng thái bằng SDK và HTTP qua `http`.
-
-Code đối chiếu contract BE và staging. Chat cập nhật khi mở bằng REST polling; chưa có external push khi app đóng. Xem [phạm vi chat/call/AI](docs/MOBILE_COLLABORATION.md), [validation](docs/FLUTTER_VALIDATION.md) và [roadmap](docs/MOBILE_ROADMAP.md).
+Xem [roadmap](docs/MOBILE_ROADMAP.md), [phạm vi chat/call/AI](docs/MOBILE_COLLABORATION.md), [báo cáo UX](docs/MOBILE_UX_REVIEW.md) và [validation](docs/FLUTTER_VALIDATION.md).
 
 ## Chuẩn bị môi trường
 

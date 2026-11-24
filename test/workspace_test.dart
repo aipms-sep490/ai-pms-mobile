@@ -107,7 +107,7 @@ void main() {
           }
           expect(body['concurrencyToken'], 'version-2');
           expect(body['newStatus'], 'BLOCKED');
-          expect(body['reason'], 'Chờ đầu vào');
+          expect(body['reason'], 'Chờ đầu vào từ nhóm thiết kế');
           return pending.future;
         }
         if (denied) return json({}, 403);
@@ -158,7 +158,17 @@ void main() {
       await tap(tester, find.text('Cập nhật'));
       expect(find.text('Nhập lý do công việc bị chặn.'), findsOneWidget);
       expect(writes, 1);
-      await tester.enterText(find.byType(TextFormField), 'Chờ đầu vào');
+      await tester.enterText(find.byType(TextFormField), 'Quá ngắn');
+      await tap(tester, find.text('Cập nhật'));
+      expect(
+        find.text('Lý do bị chặn cần tối thiểu 15 ký tự.'),
+        findsOneWidget,
+      );
+      expect(writes, 1);
+      await tester.enterText(
+        find.byType(TextFormField),
+        'Chờ đầu vào từ nhóm thiết kế',
+      );
       await tester.tap(find.text('Cập nhật'));
       await tester.pumpAndSettle();
       expect(writes, 2);

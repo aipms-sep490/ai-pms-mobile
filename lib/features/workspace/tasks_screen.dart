@@ -8,6 +8,7 @@ import '../auth/auth_controller.dart';
 import '../dashboard/dashboard_model.dart';
 import 'workspace_models.dart';
 import 'task_editor_screen.dart';
+import 'task_extras_section.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -380,6 +381,24 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(sheet, 'assignment'),
                 ),
+              if (access.allows('delete_task'))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.delete_outline,
+                    color: AppColors.danger,
+                  ),
+                  title: const Text(
+                    'Xóa công việc',
+                    style: TextStyle(color: AppColors.danger),
+                  ),
+                  subtitle: const Text('Có thể hoàn tác trong 5 giây'),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: AppColors.danger,
+                  ),
+                  onTap: () => Navigator.pop(sheet, 'delete'),
+                ),
               TextButton(
                 onPressed: () => Navigator.pop(sheet),
                 child: const Text('Đóng'),
@@ -391,6 +410,26 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
     if (!mounted) return;
     setState(() => _editing = false);
+    if (action == 'delete') {
+      try {
+        final deleted = await deleteTaskWithUndo(
+          context,
+          auth: widget.auth,
+          taskId: widget.id,
+          concurrencyToken: access.token,
+          onChanged: widget.onChanged,
+        );
+        if (deleted && mounted) Navigator.pop(context);
+      } catch (error) {
+        if (mounted) {
+          setState(() {
+            _failed = true;
+            _message = errorText(error);
+          });
+        }
+      }
+      return;
+    }
     if (action != null) await _edit(access, assignment: action == 'assignment');
   }
 
@@ -586,14 +625,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               textOf(task, 'title'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${statusText(task['status'])} · Ưu tiên ${statusText(task['priority'])}',
-              style: Theme.of(context).textTheme.bodyMedium,
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                StatusBadge(
+                  statusText(task['status']),
+                  tone: StatusBadge.toneForStatus(task['status'] as String?),
+                ),
+                StatusBadge(
+                  'Ưu tiên ${statusText(task['priority'])}',
+                  tone: StatusBadge.toneForStatus(task['priority'] as String?),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             if (access.allows('update_task') ||
-                access.allows('assign_task')) ...[
+                access.allows('assign_task') ||
+                access.allows('delete_task')) ...[
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -670,6 +720,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     '${textOf(item, 'changedByFullName')} · ${displayDate(item['changedAt'])}\n${textOf(item, 'reason', '')}',
                 icon: Icons.history,
               ),
+            const SizedBox(height: 20),
+            TaskExtrasSection(
+              auth: widget.auth,
+              task: task,
+              projectId: idOf(access.capability, 'projectId'),
+              canEdit: access.allows('update_task'),
+              onChanged: () {
+                widget.onChanged();
+                if (mounted) setState(() => _revision++);
+              },
+            ),
           ];
         },
       ),
@@ -706,13 +767,21 @@ class _ChangeReasonDialogState extends State<_ChangeReasonDialog> {
           maxLines: 5,
           decoration: InputDecoration(
             labelText: widget.target == 'BLOCKED'
-                ? 'Lý do bị chặn (bắt buộc)'
+                ? 'Lý do bị chặn (tối thiểu 15 ký tự)'
                 : 'Ghi chú (không bắt buộc)',
+            helperText: widget.target == 'BLOCKED'
+                ? 'Nêu rõ vướng mắc cần hỗ trợ (≥ 15 ký tự).'
+                : null,
           ),
-          validator: (value) =>
-              widget.target == 'BLOCKED' && (value?.trim().isEmpty ?? true)
-              ? 'Nhập lý do công việc bị chặn.'
-              : null,
+          validator: (value) {
+            if (widget.target != 'BLOCKED') return null;
+            final trimmed = value?.trim() ?? '';
+            if (trimmed.isEmpty) return 'Nhập lý do công việc bị chặn.';
+            if (trimmed.length < 15) {
+              return 'Lý do bị chặn cần tối thiểu 15 ký tự.';
+            }
+            return null;
+          },
         ),
       ),
     ),

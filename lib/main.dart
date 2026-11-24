@@ -12,6 +12,6 @@ void main() {
     api: ApiClient(origin: const String.fromEnvironment('API_BASE_URL')),
     storage: kIsWeb ? MemoryRefreshTokenStore() : SecureRefreshTokenStore(),
   );
-  runApp(AiPmsApp(auth: auth));
+  runApp(AiPmsApp(auth: auth, enableRealtime: true));
   auth.restore();
 }

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/realtime_hub_manager.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/paged_records.dart';
 import '../../ui/remote_page.dart';
@@ -15,12 +18,14 @@ class InboxScreen extends StatefulWidget {
     super.key,
     required this.auth,
     required this.onChanged,
+    this.realtime,
     this.revision = 0,
     this.initialInvites = false,
     this.showHeading = true,
   });
   final AuthController auth;
   final VoidCallback onChanged;
+  final RealtimeHubManager? realtime;
   final int revision;
   final bool initialInvites;
   final bool showHeading;
@@ -35,6 +40,24 @@ class _InboxScreenState extends State<InboxScreen> {
   int _revision = 0;
   String? _message;
   bool _failed = false;
+  StreamSubscription<LiveNotificationEvent>? _notifSub;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.realtime?.clearUnreadBump();
+    _notifSub = widget.realtime?.notificationEvents.listen((_) {
+      if (!mounted) return;
+      widget.realtime?.clearUnreadBump();
+      setState(() => _revision++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _mutate(String path, {String? confirm}) async {
     if (_saving) return;

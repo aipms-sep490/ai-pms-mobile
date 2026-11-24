@@ -6,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api_client.dart';
+import '../../core/realtime_hub_manager.dart';
+import '../../core/signalr_client.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/mobile_components.dart';
 import '../../ui/remote_page.dart';
@@ -18,8 +20,9 @@ import 'composer_exit_guard.dart';
 import 'chat_members_screen.dart';
 
 class ChatInboxScreen extends StatefulWidget {
-  const ChatInboxScreen({super.key, required this.auth});
+  const ChatInboxScreen({super.key, required this.auth, this.realtime});
   final AuthController auth;
+  final RealtimeHubManager? realtime;
   @override
   State<ChatInboxScreen> createState() => _ChatInboxScreenState();
 }
@@ -32,6 +35,32 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
   String? _nextCursor;
   String _search = '';
   bool _unreadOnly = false;
+  StreamSubscription<ChatHubEvent>? _hubSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _hubSub = widget.realtime?.chatEvents.listen((event) {
+      if (!mounted) return;
+      if (const {
+        'MessagesChanged',
+        'ConversationChanged',
+        'ReadStateChanged',
+        'AccessRevoked',
+      }.contains(event.type)) {
+        setState(() {
+          _cursor = null;
+          _revision++;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _hubSub?.cancel();
+    super.dispose();
+  }
 
   Future<List<Json>> _load() async {
     final query = Uri(queryParameters: {'pageSize': '30', 'cursor': ?_cursor})
@@ -64,8 +93,11 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) =>
-              ChatThreadScreen(auth: widget.auth, id: chatId(conversation)),
+          builder: (_) => ChatThreadScreen(
+            auth: widget.auth,
+            id: chatId(conversation),
+            realtime: widget.realtime,
+          ),
         ),
       );
       if (mounted) {
@@ -181,6 +213,21 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
       revision: _revision,
       load: _load,
       content: (context, rows, refresh) => [
+        if (widget.realtime != null) ...[
+          ListenableBuilder(
+            listenable: widget.realtime!,
+            builder: (context, _) => Align(
+              alignment: Alignment.centerLeft,
+              child: LiveStatusPill(
+                connected: widget.realtime!.chatConnected,
+                reconnecting:
+                    widget.realtime!.chatStatus ==
+                    HubConnectionStatus.reconnecting,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         TextField(
           decoration: const InputDecoration(
             hintText: 'Tìm cuộc trò chuyện đã tải',
@@ -228,8 +275,11 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                  builder: (_) =>
-                      ChatThreadScreen(auth: widget.auth, id: chatId(row)),
+                  builder: (_) => ChatThreadScreen(
+                    auth: widget.auth,
+                    id: chatId(row),
+                    realtime: widget.realtime,
+                  ),
                 ),
               );
               if (context.mounted) {
@@ -444,9 +494,15 @@ class _ChatContactsScreenState extends State<ChatContactsScreen> {
 }
 
 class ChatThreadScreen extends StatefulWidget {
-  const ChatThreadScreen({super.key, required this.auth, required this.id});
+  const ChatThreadScreen({
+    super.key,
+    required this.auth,
+    required this.id,
+    this.realtime,
+  });
   final AuthController auth;
   final String id;
+  final RealtimeHubManager? realtime;
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
 }
@@ -457,6 +513,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   final _text = TextEditingController();
   final _scroll = ScrollController();
   Timer? _timer;
+  Timer? _typingClearTimer;
+  StreamSubscription<ChatHubEvent>? _hubSub;
   bool _busy = false;
   bool _sending = false;
   String? _error;
@@ -464,13 +522,70 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   final _attachments = <Json>[];
   String? _pendingId;
   String? _pendingSignature;
+  bool _otherTyping = false;
+  int _onlineCount = 0;
+  DateTime? _lastTypingSent;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _chat.addListener(_syncReply);
+    _text.addListener(_handleTypingInput);
     _chat.refresh();
+    _attachRealtime();
     _startPolling();
+  }
+
+  void _attachRealtime() {
+    final hub = widget.realtime;
+    if (hub == null) return;
+    unawaited(hub.watchConversation(widget.id));
+    _hubSub = hub.chatEvents.listen((event) {
+      if (!mounted) return;
+      if (event.conversationId != null && event.conversationId != widget.id) {
+        return;
+      }
+      if (event.type == 'TypingChanged') {
+        final selfId = '${widget.auth.user?.id}';
+        if (event.userId != null && event.userId != selfId) {
+          setState(() => _otherTyping = event.isTyping == true);
+          _typingClearTimer?.cancel();
+          if (_otherTyping) {
+            _typingClearTimer = Timer(const Duration(seconds: 6), () {
+              if (mounted) setState(() => _otherTyping = false);
+            });
+          }
+        }
+        return;
+      }
+      if (event.type == 'PresenceChanged') {
+        setState(() => _onlineCount = event.onlineUserIds.length);
+        return;
+      }
+      _chat.refresh(
+        quiet: true,
+        markRead: !_scroll.hasClients || _scroll.position.pixels < 80,
+      );
+    });
+  }
+
+  void _handleTypingInput() {
+    final hub = widget.realtime;
+    if (hub == null || !hub.chatConnected) return;
+    if (_chat.conversation?['canSend'] != true) return;
+    final hasText = _text.text.trim().isNotEmpty;
+    final now = DateTime.now();
+    if (!hasText) {
+      _lastTypingSent = null;
+      unawaited(hub.setTyping(widget.id, false));
+      return;
+    }
+    if (_lastTypingSent == null ||
+        now.difference(_lastTypingSent!) > const Duration(seconds: 3)) {
+      _lastTypingSent = now;
+      unawaited(hub.setTyping(widget.id, true));
+    }
   }
 
   void _syncReply() {
@@ -489,15 +604,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
 
   void _startPolling() {
     _timer?.cancel();
-    // ponytail: foreground REST invalidation every four seconds; switch to the
-    // existing SignalR hub when concurrent mobile traffic warrants it.
+    // SignalR drives instant updates when connected; keep a light fallback timer when offline.
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
-        _chat.refresh(
-          quiet: true,
-          markRead: !_scroll.hasClients || _scroll.position.pixels < 80,
-        );
-      }
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+      if (widget.realtime?.chatConnected == true) return;
+      _chat.refresh(
+        quiet: true,
+        markRead: !_scroll.hasClients || _scroll.position.pixels < 80,
+      );
     });
   }
 
@@ -505,6 +619,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _chat.refresh(quiet: true);
+      if (widget.realtime != null) {
+        unawaited(widget.realtime!.watchConversation(widget.id));
+      }
       _startPolling();
     } else {
       _timer?.cancel();
@@ -514,8 +631,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _typingClearTimer?.cancel();
+    _hubSub?.cancel();
+    if (widget.realtime != null) {
+      unawaited(widget.realtime!.setTyping(widget.id, false));
+      unawaited(widget.realtime!.unwatchConversation(widget.id));
+    }
     WidgetsBinding.instance.removeObserver(this);
     _chat.removeListener(_syncReply);
+    _text.removeListener(_handleTypingInput);
     _chat.dispose();
     _text.dispose();
     _scroll.dispose();
@@ -686,12 +810,50 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
                 title: const Text('Thích 👍'),
                 onTap: () => Navigator.pop(sheet, 'react'),
               ),
+              if (_chat.conversation?['projectId'] is int &&
+                  (_chat.conversation!['projectId'] as int) > 0)
+                ListTile(
+                  leading: const Icon(Icons.add_task_outlined),
+                  title: const Text('Chuyển thành công việc'),
+                  onTap: () => Navigator.pop(sheet, 'to_task'),
+                ),
             ],
           ),
         ),
       ),
     );
     if (!mounted || choice == null) return;
+    if (choice == 'to_task') {
+      final projectId = _chat.conversation?['projectId'] as int?;
+      if (projectId == null || projectId <= 0) return;
+      final bodyText = textOf(message, 'body', '').trim();
+      await _action(() async {
+        final created = objectOf(
+          await widget.auth.request(
+            '/api/v1/projects/$projectId/hub/chat/messages/${chatId(message)}/to-task',
+            method: 'POST',
+            body: {
+              if (bodyText.isNotEmpty)
+                'title': bodyText.length > 120
+                    ? bodyText.substring(0, 120)
+                    : bodyText,
+            },
+          ),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                created['alreadyExisted'] == true
+                    ? 'Tin nhắn này đã được chuyển thành công việc trước đó.'
+                    : 'Đã tạo công việc từ tin nhắn: ${textOf(created, 'title')}',
+              ),
+            ),
+          );
+        }
+      });
+      return;
+    }
     if (choice == 'reply') {
       setState(() => _reply = message);
       return;
@@ -965,6 +1127,25 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
                 if ((_chat.loading && _chat.messages.isEmpty) || _busy)
                   const LinearProgressIndicator(
                     semanticsLabel: 'Đang xử lý cuộc trò chuyện',
+                  ),
+                if (_otherTyping || _onlineCount > 1)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    color: AppColors.warmTint,
+                    child: Text(
+                      _otherTyping
+                          ? 'Ai đó đang nhập tin nhắn…'
+                          : '$_onlineCount thành viên đang xem cuộc trò chuyện',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ),
                 Expanded(
                   child: RefreshIndicator(

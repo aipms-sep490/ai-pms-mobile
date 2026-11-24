@@ -4,8 +4,9 @@ import 'package:flutter/semantics.dart';
 import '../core/api_client.dart';
 import '../features/workspace/workspace_models.dart';
 import 'app_theme.dart';
+import 'mobile_components.dart';
 
-/// Shared loading/retry behavior for the student workspace's remote screens.
+/// Shared loading/retry behavior for workspace remote screens.
 class RemotePage<T> extends StatefulWidget {
   const RemotePage({
     super.key,
@@ -91,6 +92,7 @@ class RemotePageState<T> extends State<RemotePage<T>> {
               _load,
         },
         child: RefreshIndicator(
+          color: AppColors.primary,
           onRefresh: _load,
           child: Stack(
             children: [
@@ -101,7 +103,7 @@ class RemotePageState<T> extends State<RemotePage<T>> {
                 ),
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
                 children: [
                   if (widget.showHeading)
                     Row(
@@ -200,6 +202,8 @@ class RemotePageState<T> extends State<RemotePage<T>> {
                   child: IgnorePointer(
                     child: LinearProgressIndicator(
                       minHeight: 2,
+                      color: AppColors.primary,
+                      backgroundColor: AppColors.primarySoft,
                       semanticsLabel: 'Đang cập nhật dữ liệu',
                     ),
                   ),
@@ -222,14 +226,39 @@ class Notice extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
     child: Surface(
+      borderColor: AppColors.dangerBorder,
+      color: AppColors.dangerSoft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            message,
-            style: const TextStyle(color: AppColors.danger, height: 1.5),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 20,
+                color: AppColors.danger,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
           ),
-          if (detail != null) ...[const SizedBox(height: 8), Text(detail!)],
+          if (detail != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              detail!,
+              style: const TextStyle(color: AppColors.textSoft, fontSize: 13),
+            ),
+          ],
           if (retry != null) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -249,19 +278,40 @@ class Surface extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(18),
+    this.color = AppColors.surface,
+    this.borderColor = AppColors.border,
+    this.accentColor,
   });
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final Color color;
+  final Color borderColor;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
+    color: color,
+    elevation: 1.5,
+    shadowColor: AppColors.cardShadow,
+    surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(
-      side: const BorderSide(color: AppColors.border),
-      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(color: borderColor),
+      borderRadius: BorderRadius.circular(18),
     ),
     clipBehavior: Clip.antiAlias,
-    child: Padding(padding: padding, child: child),
+    child: accentColor == null
+        ? Padding(padding: padding, child: child)
+        : IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 4, color: accentColor),
+                Expanded(
+                  child: Padding(padding: padding, child: child),
+                ),
+              ],
+            ),
+          ),
   );
 }
 
@@ -271,7 +321,7 @@ class ContentSection extends StatelessWidget {
   final String? content;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 20),
+    padding: const EdgeInsets.only(bottom: 18),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -280,7 +330,7 @@ class ContentSection extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+                ?.copyWith(fontWeight: FontWeight.w700, color: AppColors.navy),
           ),
         ),
         if (content != null) ...[
@@ -317,26 +367,35 @@ class RecordTile extends StatelessWidget {
     this.icon = Icons.article_outlined,
     this.onTap,
     this.urgent = false,
+    this.badge,
+    this.badgeTone = StatusTone.neutral,
   });
   final String title;
   final String subtitle;
   final IconData icon;
   final VoidCallback? onTap;
   final bool urgent;
+  final String? badge;
+  final StatusTone badgeTone;
   @override
   Widget build(BuildContext context) => Semantics(
     container: true,
     button: onTap != null,
-    label: '$title\n$subtitle',
+    label: badge == null ? '$title\n$subtitle' : '$title\n$badge\n$subtitle',
     onTap: onTap,
     child: ExcludeSemantics(
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 10),
         child: Material(
           color: AppColors.surface,
+          elevation: 1,
+          shadowColor: AppColors.cardShadow,
+          surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.border),
+            side: BorderSide(
+              color: urgent ? AppColors.dangerBorder : AppColors.border,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -352,13 +411,13 @@ class RecordTile extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: urgent
                             ? AppColors.dangerSoft
-                            : AppColors.surfaceMuted,
+                            : AppColors.primarySoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
                         icon,
                         size: 20,
-                        color: urgent ? AppColors.danger : AppColors.textMuted,
+                        color: urgent ? AppColors.danger : AppColors.primary,
                       ),
                     ),
                   ),
@@ -380,6 +439,10 @@ class RecordTile extends StatelessWidget {
                             color: AppColors.text,
                           ),
                         ),
+                        if (badge != null) ...[
+                          const SizedBox(height: 6),
+                          StatusBadge(badge!, tone: badgeTone),
+                        ],
                         const SizedBox(height: 6),
                         Text(
                           subtitle,
@@ -388,7 +451,8 @@ class RecordTile extends StatelessWidget {
                               ? null
                               : TextOverflow.ellipsis,
                           style: TextStyle(
-                            height: 1.5,
+                            fontSize: 13.5,
+                            height: 1.48,
                             color: urgent
                                 ? AppColors.danger
                                 : AppColors.textMuted,
@@ -430,6 +494,11 @@ class Pagination extends StatelessWidget {
       ),
       Text(
         'Trang ${data.page}/${data.totalPages == 0 ? 1 : data.totalPages} · ${data.totalCount} mục',
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSoft,
+        ),
       ),
       IconButton(
         tooltip: 'Trang sau',

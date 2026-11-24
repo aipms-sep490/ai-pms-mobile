@@ -2,6 +2,16 @@
 
 Định hướng: **theo dõi tiến độ + thao tác nhanh**, ưu tiên Student/Team Leader. Web đảm nhiệm lập kế hoạch phức tạp, soạn hồ sơ dài, quản trị học vụ, chấm điểm và công bố. Mobile và web dùng chung backend/database.
 
+## Tiến độ ngày 24/11/2026
+
+Cập nhật **24/11 — 0.9.0** (đồng bộ đồng thời `MOB-10` → `MOB-13` và giao diện FAMS):
+- **Giao diện đồng bộ Web FAMS:** cập nhật bảng màu & token (`#F8F9FB`, `#C2410C`, `#F37021`, khối tiêu điểm navy `#222836`, tag trạng thái & tag ngành có nền/viền rõ, nâng độ nổi khối card).
+- **Đồng bộ BE V4.0 & Công việc (`0.6.0` / `MOB-10`):** áp dụng guard lý do `BLOCKED` ≥ 15 ký tự, ánh xạ mã lỗi `422`/`409` (`EVIDENCE_REQUIRED`, `TASK_DEPENDENCY_IMPACT_PENDING`, `REPORT_LOCKED`, `PEER_EVAL_REASON_TOO_SHORT`), tạo task 1 bước (`initialStatus`, `initialCriteria`), bình luận task, checklist tiêu chí hoàn thành, nhãn/taxonomy, xóa mềm + hoàn tác 5 giây và mục **Việc cần xử lý ngay** (`/students/me/next-actions`) trên Tổng quan.
+- **Báo cáo tiến độ gọn & Thao tác nhanh (`0.7.0` / `MOB-11`):** soạn/lưu nháp/nộp báo cáo tiến độ có tự điền từ BE (`/progress-reports/prefill`), xác nhận **Quy ước làm việc** 1 chạm, **Đánh giá chéo** (bắt buộc giải trình ≥ 30 ký tự khi < 50%), **Action Items**, **Tóm tắt AI sau họp**, chuyển tin nhắn chat thành task và màn theo dõi hồ sơ/sức khỏe/lịch sử kết quả (chỉ đọc).
+- **SignalR Realtime, AI V4, Lịch & Google Sign-In (`0.8.0` / `MOB-12`):** kết nối SignalR foreground tới `/hubs/chat` (tin nhắn trực tiếp, đang nhập, presence, `AccessRevoked`) và `/hubs/notifications` (badge chưa đọc trực tiếp), giữ fallback REST khi mất kết nối; nâng cấp Trợ lý AI với NDJSON streaming, đổi tên/ghim/xóa hội thoại, góp ý câu trả lời và gợi ý câu hỏi tiếp theo; thêm **Lịch tổng hợp**, **Avatar hồ sơ** và **Đăng nhập / liên kết Google** (`google_sign_in` 7.2.0 + challenge binding).
+- **Chế độ Giảng viên (`0.9.0` / `MOB-13`):** mở luồng riêng cho `LECTURER`/`SUPERVISOR` gồm Tổng quan & Triage Queue (`/dashboards/supervisor`, `/supervisors/me/triage-queue`), duyệt/từ chối yêu cầu hướng dẫn, xem đồ án và viết nhận xét ngắn cho báo cáo/cuộc họp, dùng chung chat/LiveKit/AI/inbox. Chưa đưa chấm điểm rubric hoặc quản trị học vụ vào mobile.
+- **Còn lại (`1.0.0` / `MOB-03A`, `MOB-09`, `MOB-14`):** External Push màn hình khóa (FCM/APNs — cần task BE riêng lưu device token), nghiệm thu thiết bị Android/iOS vật lý (secure storage restart, LiveKit 2 máy, Google Sign-In native) và bản phát hành có ký.
+
 ## Tiến độ ngày 16/11/2026
 
 Cập nhật **17/11 — 0.5.0**: redesign UX toàn app với các agent phụ trách riêng AI/chat, task/video và QA độc lập. Giảm cụm nút, thống nhất điều hướng/typography, thêm rail cuộn ngang và vuốt tab, form lưu cố định; đã sửa các lỗi keyboard, stale data/reply và focus. Xem [báo cáo UX](MOBILE_UX_REVIEW.md). Chưa mở thêm nghiệp vụ hoặc thay provider BE trong lượt này.
