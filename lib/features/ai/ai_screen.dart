@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -164,10 +166,12 @@ class AiHomeScreen extends StatelessWidget {
       title: 'AI đồng hành',
       showHeading: false,
       load: () async {
+        if (projectId != null) return {'projectId': projectId};
+        if (!(auth.user?.isStudent ?? false)) return {'projectId': null};
         final dashboard = StudentDashboard.fromJson(
           await auth.getJson('/api/v1/dashboards/student'),
         );
-        return {'projectId': projectId ?? dashboard.project?.id};
+        return {'projectId': dashboard.project?.id};
       },
       content: (context, data, refresh) {
         final id = data['projectId'] as int?;
@@ -597,7 +601,123 @@ class _AssistantHistoryScreenState extends State<AssistantHistoryScreen> {
   int? _nextBefore;
   bool _hasMore = false;
   int _revision = 0;
+  bool _mutating = false;
   final _rows = <Json>[];
+
+  Future<void> _rename(Json row) async {
+    final ctrl = TextEditingController(text: textOf(row, 'title', ''));
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Đổi tên hội thoại'),
+        content: TextField(
+          controller: ctrl,
+          maxLength: 160,
+          decoration: const InputDecoration(labelText: 'Tên mới'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, ctrl.text.trim()),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (!mounted || updated == null || updated.isEmpty) return;
+    setState(() => _mutating = true);
+    try {
+      await widget.auth.request(
+        '/api/v1/academic/assistant/conversations/${idOf(row)}',
+        method: 'PATCH',
+        body: {'title': updated},
+      );
+      if (mounted) {
+        setState(() {
+          _before = null;
+          _revision++;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errorText(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  Future<void> _togglePin(Json row) async {
+    setState(() => _mutating = true);
+    try {
+      await widget.auth.request(
+        '/api/v1/academic/assistant/conversations/${idOf(row)}',
+        method: 'PATCH',
+        body: {'isPinned': row['isPinned'] != true},
+      );
+      if (mounted) {
+        setState(() {
+          _before = null;
+          _revision++;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errorText(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  Future<void> _delete(Json row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Xóa hội thoại AI?'),
+        content: const Text('Hội thoại này sẽ bị xóa khỏi danh sách lịch sử.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() => _mutating = true);
+    try {
+      await widget.auth.request(
+        '/api/v1/academic/assistant/conversations/${idOf(row)}',
+        method: 'DELETE',
+      );
+      if (mounted) {
+        setState(() {
+          _before = null;
+          _revision++;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errorText(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Hội thoại AI')),
@@ -633,18 +753,70 @@ class _AssistantHistoryScreenState extends State<AssistantHistoryScreen> {
       content: (context, rows, refresh) => [
         if (rows.isEmpty) const Text('Bạn chưa có hội thoại AI được lưu.'),
         for (final row in rows)
-          RecordTile(
-            title: textOf(row, 'title'),
-            subtitle: displayDate(row['updatedAt']),
-            icon: Icons.chat_outlined,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => AssistantChatScreen(
-                  auth: widget.auth,
-                  projectId: row['projectId'] as int?,
-                  conversationId: idOf(row),
-                  scope: textOf(row, 'scope', 'ACADEMIC'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Surface(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  row['isPinned'] == true
+                      ? Icons.push_pin
+                      : Icons.chat_outlined,
+                  color: row['isPinned'] == true
+                      ? AppColors.primary
+                      : AppColors.textMuted,
+                ),
+                title: Text(
+                  textOf(row, 'title'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${_scopeLabel(textOf(row, 'scope', 'ACADEMIC'))} · ${displayDate(row['updatedAt'])}',
+                ),
+                onTap: _mutating
+                    ? null
+                    : () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => AssistantChatScreen(
+                              auth: widget.auth,
+                              projectId: row['projectId'] as int?,
+                              conversationId: idOf(row),
+                              scope: textOf(row, 'scope', 'ACADEMIC'),
+                            ),
+                          ),
+                        );
+                        if (mounted) await refresh();
+                      },
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Quản lý hội thoại',
+                  enabled: !_mutating,
+                  onSelected: (action) {
+                    if (action == 'rename') _rename(row);
+                    if (action == 'pin') _togglePin(row);
+                    if (action == 'delete') _delete(row);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Text('Đổi tên'),
+                    ),
+                    PopupMenuItem(
+                      value: 'pin',
+                      child: Text(row['isPinned'] == true ? 'Bỏ ghim' : 'Ghim'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        'Xóa hội thoại',
+                        style: TextStyle(color: AppColors.danger),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -693,6 +865,9 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   ApiUpload? _file;
   Json? _unsyncedResponse;
   String? _unsyncedQuery;
+  String? _streamPreview;
+  String? _streamingQuery;
+  final _feedbackSent = <int, int>{};
   String _mode = 'CHAT';
   @override
   void initState() {
@@ -778,6 +953,8 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _streamPreview = null;
+      _streamingQuery = query;
     });
     try {
       if (_id == null) {
@@ -802,26 +979,58 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         if (_mode == 'PROGRESS') 'toolMode': 'PROGRESS',
         if (_mode == 'TASK') 'draftKind': 'TASK',
       };
-      final response = objectOf(
-        await widget.auth.request(
-          _file == null
-              ? '/api/v1/academic/assistant/ask'
-              : '/api/v1/academic/assistant/ask-with-files',
-          method: 'POST',
-          body: _file == null
-              ? body
-              : {
-                  for (final e in body.entries)
-                    if (e.value != null) e.key: '${e.value}',
-                },
-          upload: _file,
+      final fields = <String, String>{
+        for (final e in body.entries)
+          if (e.value != null) e.key: '${e.value}',
+      };
+      Json? response;
+      var fallback = false;
+      try {
+        await for (final line in widget.auth.requestNdjsonStream(
+          '/api/v1/academic/assistant/stream',
+          fields: fields,
+          uploads: [?_file],
           requestTimeout: _aiTimeout,
-        ),
-      );
+        )) {
+          if (!mounted) return;
+          final event = jsonDecode(line);
+          if (event is! Map<String, dynamic>) continue;
+          final type = event['type'];
+          if (type == 'preview' && event['text'] is String) {
+            setState(() => _streamPreview = event['text'] as String);
+            _revealLatest();
+          } else if (type == 'completed' && event['response'] is Json) {
+            response = objectOf(event['response']);
+          } else if (type == 'error' && event['text'] is String) {
+            throw ApiException(event['text'] as String);
+          }
+        }
+      } on ApiException catch (error) {
+        if (error.statusCode == 404 || error.statusCode == 405) {
+          fallback = true;
+        } else {
+          rethrow;
+        }
+      }
+      if (fallback || response == null) {
+        response = objectOf(
+          await widget.auth.request(
+            _file == null
+                ? '/api/v1/academic/assistant/ask'
+                : '/api/v1/academic/assistant/ask-with-files',
+            method: 'POST',
+            body: _file == null ? body : fields,
+            upload: _file,
+            requestTimeout: _aiTimeout,
+          ),
+        );
+      }
       if (!mounted) return;
       _query.clear();
       setState(() {
         _file = null;
+        _streamPreview = null;
+        _streamingQuery = null;
         _unsyncedResponse = response;
         _unsyncedQuery = query;
       });
@@ -829,12 +1038,116 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     } catch (error) {
       if (error is ApiException && error.statusCode == 409) await _load();
       if (mounted) {
-        setState(() => _error = errorText(error));
+        setState(() {
+          _streamPreview = null;
+          _streamingQuery = null;
+          _error = errorText(error);
+        });
         _revealLatest();
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _sendFeedback(int runId, int rating) async {
+    try {
+      await widget.auth.request(
+        '/api/v1/academic/assistant/runs/$runId/feedback',
+        method: 'POST',
+        body: {'rating': rating},
+      );
+      if (mounted) {
+        setState(() => _feedbackSent[runId] = rating);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errorText(error))));
+      }
+    }
+  }
+
+  Widget _turnExtras(Json response) {
+    final runId = response['runId'];
+    final existingRating = response['feedbackRating'] is int
+        ? response['feedbackRating'] as int
+        : (runId is int ? _feedbackSent[runId] : null);
+    final followUps = response['followUpSuggestions'] is List
+        ? (response['followUpSuggestions'] as List)
+              .whereType<String>()
+              .where((s) => s.trim().isNotEmpty)
+              .toList()
+        : const <String>[];
+    if (runId is! int && followUps.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (runId is int && runId > 0) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text(
+                'Đánh giá:',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+              ),
+              IconButton(
+                tooltip: 'Hữu ích',
+                onPressed: _busy ? null : () => _sendFeedback(runId, 1),
+                icon: Icon(
+                  existingRating == 1
+                      ? Icons.thumb_up
+                      : Icons.thumb_up_outlined,
+                  size: 18,
+                  color: existingRating == 1
+                      ? AppColors.success
+                      : AppColors.textMuted,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Chưa hữu ích',
+                onPressed: _busy ? null : () => _sendFeedback(runId, -1),
+                icon: Icon(
+                  existingRating == -1
+                      ? Icons.thumb_down
+                      : Icons.thumb_down_outlined,
+                  size: 18,
+                  color: existingRating == -1
+                      ? AppColors.danger
+                      : AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (followUps.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final suggestion in followUps.take(3))
+                ActionChip(
+                  label: Text(
+                    suggestion,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          _query.text = suggestion;
+                          _ask();
+                        },
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 
   Future<void> _attach() async {
@@ -1043,7 +1356,13 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                         projectId: widget.projectId,
                         includeFooter: false,
                       ),
+                      _turnExtras(objectOf(turn['response'])),
                       const Divider(height: 32),
+                    ],
+                    if (_streamPreview != null && _streamingQuery != null) ...[
+                      _AiQuestion(_streamingQuery!),
+                      const SizedBox(height: 16),
+                      _AiReadingSection('Đang trả lời…', _streamPreview!),
                     ],
                     if (_unsyncedResponse != null) ...[
                       _AiQuestion(_unsyncedQuery!),
@@ -1055,6 +1374,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                         projectId: widget.projectId,
                         includeFooter: false,
                       ),
+                      _turnExtras(_unsyncedResponse!),
                     ],
                     if (_error != null)
                       Padding(
