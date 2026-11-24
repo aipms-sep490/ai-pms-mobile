@@ -118,3 +118,13 @@ Baseline `1476232`, nhánh `fix/mobile-interaction-polish`; cùng ba agent tri�
 - Full suite **46 tests đạt**: thêm11 hồi quy cho system Back AI/chat, bản soạn chỉ có context, gửi đang chờ, sheet/chat edit màn ngang, giữ draft task, xóa query task lỗi giữ milestone scope, inbox403 phục hồi category, phân trang sau khi mất dòng và video poll đến muộn. Các request ghi trong test đều đi qua MockClient; không phải mutation trên BE thật.
 - Không đổi auth/API contract, dependency, native permission hoặc provider. Bản soạn chỉ giữ trong bộ nhớ khi còn màn hình; chưa có khôi phục draft sau khi OS đóng app.
 - CI kiểm tra format/analyze/tests, release web và staging Android debug APK trước merge. Máy Windows hiện không có Android SDK/emulator/adb; chưa xác minh native runtime, secure storage restart, media/Bluetooth hoặc iOS.
+
+## Mở rộng nền tảng & Đồng bộ V4 0.9.0 — 24/11/2026
+
+Baseline `f76cd62`, nhánh `feat/mobile-v09-platform-expansion`; đối chiếu contract `ai-pms-backend` `origin/develop` (`5109a59`, sau đợt merge V4.0 Core Business Upgrade #153).
+
+- Flutter 3.50.0 stable / Dart 3.14.0; thêm `web_socket_channel` 3.0.3 (SignalR JSON Hub Protocol v1 thuần Dart) và `google_sign_in` 7.2.0, giữ lockfile `pubspec.lock`.
+- Format check (`dart format --output=none --set-exit-if-changed lib test`) và `flutter analyze`: **0 issues**.
+- Full test suite: **55 tests đạt** (46 tests hồi quy trước đó + 9 test mới cho ánh xạ mã lỗi V4 `422`/`409`, quy tắc `BLOCKED` ≥ 15 ký tự, Google challenge/cookie/login, SignalR handshake/invocation/event/logout, báo cáo tiến độ prefill + submit, quy ước làm việc 1 chạm, đánh giá chéo < 50% ≥ 30 ký tự, AI NDJSON streaming + feedback và chế độ Giảng viên ở màn 320dp).
+- Build Web release với `config/staging.json` (`flutter build web --release --dart-define-from-file=config/staging.json`) đạt; Android staging debug APK được kiểm tra qua GitHub Actions CI.
+- Ghi chú trung thực về giới hạn: tất cả các bài test ghi và SignalR/Google ở trên dùng mock HTTP / fake WebSocket / fake Google provider. Nghiệm thu thiết bị Android/iOS vật lý (secure storage restart, Google Sign-In native SDK + `AllowedOrigins`, SignalR mạng thật, LiveKit 2 máy, bản phát hành có ký) vẫn cần xác minh riêng trên thiết bị mục tiêu.
