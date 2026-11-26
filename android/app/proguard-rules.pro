@@ -5,6 +5,10 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
+# Optional Play Core deferred-components hooks referenced by Flutter engine (unused by this app)
+-dontwarn com.google.android.play.core.splitcompat.**
+-dontwarn com.google.android.play.core.splitinstall.**
+-dontwarn com.google.android.play.core.tasks.**
 
 # LiveKit & WebRTC native JNI callbacks
 -keep class org.webrtc.** { *; }
