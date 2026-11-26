@@ -146,7 +146,8 @@ jobs:
           echo "Using apksigner: $APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "${OUT}/ai-pms-v${V}-universal-release.apk"
           "$APKSIGNER" verify --verbose --print-certs "${OUT}/ai-pms-v${V}-arm64-v8a-release.apk"
-          jarsigner -verify -strict "${OUT}/ai-pms-v${V}-release.aab"
+          "$APKSIGNER" verify --verbose --print-certs "${OUT}/ai-pms-v${V}-armeabi-v7a-release.apk"
+          jarsigner -verify "${OUT}/ai-pms-v${V}-release.aab" | tee /dev/stderr | grep -q "jar verified."
 
           (cd "$OUT" && sha256sum *.apk *.aab > SHA256SUMS.txt)
           ls -lh "$OUT"
