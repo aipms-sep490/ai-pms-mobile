@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties (ignored by Git) for local release signing.
+# NEVER commit android/key.properties or *.jks/*.keystore files to version control.
+storeFile=C:/Users/YOUR_USER/.config/aipms-mobile-signing/aipms-upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=aipms-upload
+keyPassword=CHANGE_ME
