@@ -1,0 +1,206 @@
+name: Android Release (APK & Play Store AAB)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target API config file (config/<env>.json)'
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      publish_github_release:
+        description: 'Publish signed APK & AAB to GitHub Releases'
+        type: boolean
+        default: true
+      release_tag:
+        description: 'GitHub Release tag (leave blank to use v<versionName>-<run_number>)'
+        type: string
+        default: ''
+      play_track:
+        description: 'Google Play upload track (requires PLAY_STORE_SERVICE_ACCOUNT_JSON secret)'
+        type: choice
+        default: none
+        options:
+          - none
+          - internal
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    name: Build Signed Release APK & AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          channel: stable
+          cache: true
+
+      - name: Verify signing secrets are configured
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
+            echo "::error::Missing Android signing secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD)."
+            exit 1
+          fi
+
+      - name: Install dependencies & run checks
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
+
+      - name: Resolve version & config file
+        id: meta
+        run: |
+          VERSION_RAW=$(grep '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')
+          VERSION_NAME="${VERSION_RAW%%+*}"
+          VERSION_CODE="${VERSION_RAW##*+}"
+          ENV_NAME="${{ inputs.environment || 'staging' }}"
+          CONFIG_FILE="config/${ENV_NAME}.json"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "::error::Config file $CONFIG_FILE not found."
+            exit 1
+          fi
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          elif [ -n "${{ inputs.release_tag }}" ]; then
+            TAG_NAME="${{ inputs.release_tag }}"
+          else
+            TAG_NAME="v${VERSION_NAME}-build.${{ github.run_number }}"
+          fi
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "env_name=${ENV_NAME}" >> "$GITHUB_OUTPUT"
+          echo "config_file=${CONFIG_FILE}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Building AI-PMS Mobile ${VERSION_NAME}+${VERSION_CODE} using ${CONFIG_FILE} (tag: ${TAG_NAME})"
+
+      - name: Decode upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "${RUNNER_TEMP}/upload-keystore.jks"
+          chmod 600 "${RUNNER_TEMP}/upload-keystore.jks"
+          keytool -list -keystore "${RUNNER_TEMP}/upload-keystore.jks" -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" | grep -E "Alias name|Entry type|SHA1|SHA256"
+
+      - name: Build signed Release APKs (Universal + Split-per-ABI)
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter build apk --release --dart-define-from-file="${{ steps.meta.outputs.config_file }}"
+          cp build/app/outputs/flutter-apk/app-release.apk "${RUNNER_TEMP}/ai-pms-universal.apk"
+          flutter build apk --release --split-per-abi --dart-define-from-file="${{ steps.meta.outputs.config_file }}"
+
+      - name: Build signed Google Play App Bundle (.aab)
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter build appbundle --release --dart-define-from-file="${{ steps.meta.outputs.config_file }}"
+
+      - name: Collect & verify release signatures
+        run: |
+          V="${{ steps.meta.outputs.version_name }}"
+          OUT="release-artifacts"
+          mkdir -p "$OUT"
+          cp "${RUNNER_TEMP}/ai-pms-universal.apk" "${OUT}/ai-pms-v${V}-universal-release.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "${OUT}/ai-pms-v${V}-arm64-v8a-release.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "${OUT}/ai-pms-v${V}-armeabi-v7a-release.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "${OUT}/ai-pms-v${V}-release.aab"
+
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner | sort -V | tail -n 1)
+          echo "Using apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "${OUT}/ai-pms-v${V}-universal-release.apk"
+          "$APKSIGNER" verify --verbose --print-certs "${OUT}/ai-pms-v${V}-arm64-v8a-release.apk"
+          jarsigner -verify -strict "${OUT}/ai-pms-v${V}-release.aab"
+
+          (cd "$OUT" && sha256sum *.apk *.aab > SHA256SUMS.txt)
+          ls -lh "$OUT"
+          cat "${OUT}/SHA256SUMS.txt"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-pms-android-release-v${{ steps.meta.outputs.version_name }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'push' || inputs.publish_github_release == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag_name }}"
+          V="${{ steps.meta.outputs.version_name }}"
+          CODE="${{ steps.meta.outputs.version_code }}"
+          ENV_NAME="${{ steps.meta.outputs.env_name }}"
+          NOTES=$(cat <<EOF
+          ## AI-PMS Mobile v${V} (Build ${CODE} · ${ENV_NAME})
+
+          ### Tải xuống & Cài đặt Android
+          - **Khuyên dùng cho điện thoại Android hiện đại (64-bit, file nhẹ):** \`ai-pms-v${V}-arm64-v8a-release.apk\`
+          - **Bản tương thích mọi thiết bị Android (Universal):** \`ai-pms-v${V}-universal-release.apk\`
+          - **Gói phát hành Google Play Store (CH Play):** \`ai-pms-v${V}-release.aab\`
+
+          ### Lưu ý cài đặt trực tiếp (APK)
+          1. Tải file \`.apk\` về điện thoại Android và mở tệp.
+          2. Nếu thiết bị hỏi quyền **Cài đặt ứng dụng không rõ nguồn gốc (Install unknown apps)**, cho phép trình duyệt/trình quản lý tệp cài đặt.
+          3. Toàn bộ tệp đã được ký số phát hành và kiểm chứng chữ ký bằng \`apksigner\` + \`jarsigner\`.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-artifacts/* --clobber
+          else
+            gh release create "$TAG" release-artifacts/* \
+              --title "AI-PMS Mobile v${V} (${TAG})" \
+              --notes "$NOTES"
+          fi
+
+      - name: Upload AAB to Google Play Console (Internal Testing)
+        if: ${{ inputs.play_track == 'internal' && secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: vn.edu.aipms.ai_pms_mobile
+          releaseFiles: release-artifacts/ai-pms-v${{ steps.meta.outputs.version_name }}-release.aab
+          track: internal
+          status: completed
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/upload-keystore.jks"
